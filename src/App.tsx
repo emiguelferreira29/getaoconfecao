@@ -5,8 +5,9 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import './index.css';
 
-// IMPORTAR O NOVO COMPONENTE DE LOGIN
+// COMPONENTES IMPORTADOS
 import Login from './components/Login';
+import { ModalAlerta, ModalConfirmacao, TipoModalConfirmacao, btnPrimary, btnSecondary, btnCard, inputStyle, labelStyle } from './components/Modais';
 
 // --- TIPOS DE DADOS ---
 type Artigo = { id: number; codigo: string; nome: string; preco: number; };
@@ -27,20 +28,24 @@ export default function App() {
   const [encomendas, setEncomendas] = useState<Encomenda[]>([]);
   const [aCarregar, setACarregar] = useState<boolean>(true);
   
+  // Estados para Expedição
   const [modoExpedicao, setModoExpedicao] = useState<'livre' | 'op' | null>(null);
   const [opSelecionada, setOpSelecionada] = useState<string>('');
   const [listaExpedicao, setListaExpedicao] = useState<ItemExpedicao[]>([]);
   
+  // Estados para nova OP (Entrada)
   const [novaOpNumero, setNovaOpNumero] = useState('');
   const [novaOpDataEntrega, setNovaOpDataEntrega] = useState('');
   const [novaOpLista, setNovaOpLista] = useState<ItemNovaOp[]>([]);
   const [novaOpArtigo, setNovaOpArtigo] = useState<Artigo | null>(null);
   const [novaOpQtd, setNovaOpQtd] = useState('');
 
+  // Estados para Edição de OP Pendente
   const [editandoOpId, setEditandoOpId] = useState<string | null>(null);
   const [editOpData, setEditOpData] = useState<string>('');
   const [editOpQuantidades, setEditOpQuantidades] = useState<Record<number, number>>({});
 
+  // Estados para Formulario Saida
   const [modoSaida, setModoSaida] = useState<'scanner' | 'manual' | null>(null);
   const [artigoSelecionado, setArtigoSelecionado] = useState<Artigo | null>(null);
   const [pausarCamara, setPausarCamara] = useState<boolean>(false);
@@ -48,13 +53,15 @@ export default function App() {
   const [formTamanho, setFormTamanho] = useState('');
   const [formQtd, setFormQtd] = useState('');
   
+  // Estados Catalogo
   const [novoCod, setNovoCod] = useState('');
   const [novoNome, setNovoNome] = useState('');
   const [novoPreco, setNovoPreco] = useState('');
   const [editandoPrecoId, setEditandoPrecoId] = useState<number | null>(null);
   const [precoEditado, setPrecoEditado] = useState<string>('');
 
-  const [modalConfirmacao, setModalConfirmacao] = useState<{ aberto: boolean; tipo: 'saida' | 'artigo' | 'logout' | 'cancelar_lote' | 'lote_inteiro' | 'encomenda_inteira' | null; idParaApagar: number | string | null }>({ aberto: false, tipo: null, idParaApagar: null });
+  // ESTADOS DOS MODAIS
+  const [modalConfirmacao, setModalConfirmacao] = useState<{ aberto: boolean; tipo: TipoModalConfirmacao; idParaApagar: number | string | null }>({ aberto: false, tipo: null, idParaApagar: null });
   const [alerta, setAlerta] = useState<{ visivel: boolean; titulo: string; mensagem: string; tipo: 'sucesso' | 'erro' | 'aviso' }>({ visivel: false, titulo: '', mensagem: '', tipo: 'sucesso' });
 
   const mostrarAlerta = (titulo: string, mensagem: string, tipo: 'sucesso' | 'erro' | 'aviso' = 'aviso') => { setAlerta({ visivel: true, titulo, mensagem, tipo }); };
@@ -66,14 +73,16 @@ export default function App() {
     setACarregar(true);
     const { data: dadosArtigos } = await supabase.from('artigos').select('*').order('codigo');
     if (dadosArtigos) setArtigos(dadosArtigos);
+
     const { data: dadosSaidas } = await supabase.from('saidas').select('*').order('data', { ascending: false });
     if (dadosSaidas) setSaidas(dadosSaidas);
+
     const { data: dadosEnc } = await supabase.from('encomendas').select('*');
     if (dadosEnc) setEncomendas(dadosEnc);
+    
     setACarregar(false);
   }
 
-  // NOVA FUNÇÃO DE LOGIN PASSADA PARA O COMPONENTE
   const handleLogin = (user: string, pass: string) => {
     if ((user === 'nelaze' && pass === '1988') || (user === 'admin' && pass === 'admin')) {
       setAutenticado(true); localStorage.setItem('autenticadoConfecao', 'true');
@@ -85,11 +94,16 @@ export default function App() {
   const handleLogout = () => setModalConfirmacao({ aberto: true, tipo: 'logout', idParaApagar: null });
 
   const handleVoltar = () => {
-    if (ecraAtual === 'resumo_expedicao') { pedirConfirmacaoCancelarLote(); } 
-    else if (ecraAtual === 'scanner' || ecraAtual === 'formulario_saida') { setEcraAtual('resumo_expedicao'); } 
-    else { setEcraAtual('home'); }
+    if (ecraAtual === 'resumo_expedicao') {
+      pedirConfirmacaoCancelarLote();
+    } else if (ecraAtual === 'scanner' || ecraAtual === 'formulario_saida') {
+      setEcraAtual('resumo_expedicao');
+    } else {
+      setEcraAtual('home');
+    }
   };
 
+  // REGISTAR ENTRADA
   const adicionarItemNovaOp = (e: React.FormEvent) => {
     e.preventDefault();
     if (!novaOpArtigo) return mostrarAlerta('Atenção', 'Selecione um artigo.', 'aviso');
@@ -103,12 +117,20 @@ export default function App() {
     if (!novaOpNumero) return mostrarAlerta('Atenção', 'Indique o número da OP.', 'aviso');
     if (novaOpLista.length === 0) return mostrarAlerta('Atenção', 'Adicione pelo menos um artigo à OP.', 'aviso');
 
-    const dadosParaInserir = novaOpLista.map(item => ({ op_numero: novaOpNumero, artigo_codigo: item.artigo.codigo, artigo_nome: item.artigo.nome, quantidade_pedida: item.quantidade, data_entrega: novaOpDataEntrega ? novaOpDataEntrega : null }));
+    const dadosParaInserir = novaOpLista.map(item => ({
+      op_numero: novaOpNumero, artigo_codigo: item.artigo.codigo, artigo_nome: item.artigo.nome,
+      quantidade_pedida: item.quantidade, data_entrega: novaOpDataEntrega ? novaOpDataEntrega : null
+    }));
+
     const { error } = await supabase.from('encomendas').insert(dadosParaInserir);
     if (error) mostrarAlerta('Erro', error.message, 'erro');
-    else { mostrarAlerta('Sucesso', `A ${novaOpNumero} foi registada com sucesso!`, 'sucesso'); setNovaOpNumero(''); setNovaOpDataEntrega(''); setNovaOpLista([]); carregarDados(); setEcraAtual('home'); }
+    else {
+      mostrarAlerta('Sucesso', `A ${novaOpNumero} foi registada com sucesso!`, 'sucesso');
+      setNovaOpNumero(''); setNovaOpDataEntrega(''); setNovaOpLista([]); carregarDados(); setEcraAtual('home');
+    }
   };
 
+  // EDIÇÃO DE OP PENDENTE
   const iniciarEdicaoOp = (grupo: any) => {
     setEditandoOpId(grupo.op_numero); setEditOpData(grupo.data_entrega || '');
     const qtds: Record<number, number> = {};
@@ -124,10 +146,12 @@ export default function App() {
         const { error } = await supabase.from('encomendas').update({ quantidade_pedida: qtd, data_entrega: editOpData ? editOpData : null }).eq('id', id);
         if (error) throw error;
       }
-      mostrarAlerta('Sucesso', `A ${op_numero} foi atualizada!`, 'sucesso'); setEditandoOpId(null); carregarDados();
+      mostrarAlerta('Sucesso', `A ${op_numero} foi atualizada!`, 'sucesso');
+      setEditandoOpId(null); carregarDados();
     } catch (err: any) { mostrarAlerta('Erro ao atualizar', err.message, 'erro'); }
   };
 
+  // CATÁLOGO
   const registarNovoProduto = async (e: React.FormEvent) => {
     e.preventDefault();
     const precoNum = parseFloat(novoPreco.replace(',', '.'));
@@ -143,6 +167,7 @@ export default function App() {
     if (!error) { setEditandoPrecoId(null); carregarDados(); }
   };
 
+  // EXPEDIÇÃO
   const iniciarExpedicaoLivre = () => { setModoExpedicao('livre'); setOpSelecionada(''); setListaExpedicao([]); setFormOP(''); setEcraAtual('resumo_expedicao'); };
   const iniciarExpedicaoOP = () => { if (!opSelecionada) return mostrarAlerta('Atenção', 'Selecione uma OP pendente.', 'aviso'); setModoExpedicao('op'); setListaExpedicao([]); setFormOP(opSelecionada); setEcraAtual('resumo_expedicao'); };
 
@@ -197,6 +222,7 @@ export default function App() {
     setListaExpedicao([]); setFormOP(''); setFormTamanho(''); carregarDados(); setEcraAtual('home');
   };
 
+  // MÉTODOS DE MODAIS
   const pedirConfirmacaoApagar = (id: number, tipo: 'saida' | 'artigo') => { setModalConfirmacao({ aberto: true, tipo, idParaApagar: id }); };
   const pedirConfirmacaoApagarLoteInteiro = (lote_id: string) => { setModalConfirmacao({ aberto: true, tipo: 'lote_inteiro', idParaApagar: lote_id }); };
   const pedirConfirmacaoApagarEncomenda = (op_numero: string) => { setModalConfirmacao({ aberto: true, tipo: 'encomenda_inteira', idParaApagar: op_numero }); };
@@ -206,6 +232,7 @@ export default function App() {
   const executarAcaoModal = async () => {
     const { idParaApagar, tipo } = modalConfirmacao;
     if (!tipo) return;
+
     if (tipo === 'logout') { setAutenticado(false); localStorage.removeItem('autenticadoConfecao'); setEcraAtual('home'); }
     else if (tipo === 'cancelar_lote') { setListaExpedicao([]); setEcraAtual('home'); }
     else if (tipo === 'saida' && idParaApagar) { await supabase.from('saidas').delete().eq('id', idParaApagar); carregarDados(); }
@@ -269,16 +296,7 @@ export default function App() {
     return (
       <>
         <Login onLogin={handleLogin} />
-        {alerta.visivel && (
-          <div style={{...modalOverlayStyle, zIndex: 2000}}>
-            <div style={modalBoxStyle}>
-              <div style={{ fontSize: '2.5rem', marginBottom: '10px' }}>{alerta.tipo === 'sucesso' ? '✅' : alerta.tipo === 'erro' ? '❌' : '⚠️'}</div>
-              <h3 style={{ margin: '0 0 10px 0', fontSize: '1.2rem', color: 'var(--text-primary)' }}>{alerta.titulo}</h3>
-              <p style={{ color: 'var(--text-secondary)', marginBottom: '25px', fontSize: '0.95rem', lineHeight: '1.4' }}>{alerta.mensagem}</p>
-              <button onClick={fecharAlerta} style={btnPrimary}>OK</button>
-            </div>
-          </div>
-        )}
+        <ModalAlerta visivel={alerta.visivel} titulo={alerta.titulo} mensagem={alerta.mensagem} tipo={alerta.tipo} onFechar={fecharAlerta} />
       </>
     );
   }
@@ -604,35 +622,10 @@ export default function App() {
       </main>
 
       {/* ALERTAS */}
-      {alerta.visivel && (
-        <div style={{...modalOverlayStyle, zIndex: 2000}}>
-          <div style={modalBoxStyle}>
-            <div style={{ fontSize: '2.5rem', marginBottom: '10px' }}>{alerta.tipo === 'sucesso' ? '✅' : alerta.tipo === 'erro' ? '❌' : '⚠️'}</div>
-            <h3 style={{ margin: '0 0 10px 0', fontSize: '1.2rem', color: 'var(--text-primary)' }}>{alerta.titulo}</h3>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: '25px', fontSize: '0.95rem', lineHeight: '1.4' }}>{alerta.mensagem}</p>
-            <button onClick={fecharAlerta} style={btnPrimary}>OK</button>
-          </div>
-        </div>
-      )}
+      <ModalAlerta visivel={alerta.visivel} titulo={alerta.titulo} mensagem={alerta.mensagem} tipo={alerta.tipo} onFechar={fecharAlerta} />
 
       {/* MODAL DE CONFIRMAÇÃO */}
-      {modalConfirmacao.aberto && (
-        <div style={modalOverlayStyle}>
-          <div style={modalBoxStyle}>
-            <div style={{ fontSize: '2.5rem', marginBottom: '10px' }}>{modalConfirmacao.tipo === 'logout' ? '🚪' : modalConfirmacao.tipo === 'cancelar_lote' ? '🛑' : '⚠️'}</div>
-            <h3 style={{ margin: '0 0 10px 0', fontSize: '1.2rem', color: 'var(--text-primary)' }}>
-              {modalConfirmacao.tipo === 'logout' ? 'Terminar Sessão' : modalConfirmacao.tipo === 'cancelar_lote' ? 'Cancelar Expedição' : modalConfirmacao.tipo === 'lote_inteiro' ? 'Eliminar Lote Inteiro' : modalConfirmacao.tipo === 'encomenda_inteira' ? 'Eliminar OP' : 'Confirmar Eliminação'}
-            </h3>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: '25px', fontSize: '0.95rem', lineHeight: '1.4' }}>
-              {modalConfirmacao.tipo === 'logout' ? 'Tem a certeza que deseja sair da sua conta?' : modalConfirmacao.tipo === 'cancelar_lote' ? 'Vai perder as peças que já adicionou a este lote. Deseja cancelar?' : modalConfirmacao.tipo === 'lote_inteiro' ? 'Tem a certeza que deseja apagar a expedição COMPLETA?' : modalConfirmacao.tipo === 'encomenda_inteira' ? 'Tem a certeza que deseja apagar esta OP?' : <>Tem a certeza que deseja apagar este registo?</>}
-            </p>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button onClick={cancelarModal} style={{ ...btnSecondary, padding: '12px', flex: 1 }}>Voltar</button>
-              <button onClick={executarAcaoModal} style={{ ...btnPrimary, backgroundColor: modalConfirmacao.tipo === 'logout' ? 'var(--primary-color)' : '#ef4444', padding: '12px', flex: 1 }}>{modalConfirmacao.tipo === 'logout' ? 'Sair' : modalConfirmacao.tipo === 'cancelar_lote' ? 'Descartar' : 'Apagar'}</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ModalConfirmacao aberto={modalConfirmacao.aberto} tipo={modalConfirmacao.tipo} onCancelar={cancelarModal} onConfirmar={executarAcaoModal} />
 
       <style>{`
         .loading { display: flex; justify-content: center; align-items: center; height: 100vh; background: var(--bg-color); color: var(--primary-color); }
@@ -642,11 +635,3 @@ export default function App() {
     </div>
   );
 }
-
-const btnPrimary: React.CSSProperties = { width: '100%', padding: '15px', backgroundColor: 'var(--primary-color)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer' };
-const btnSecondary: React.CSSProperties = { width: '100%', padding: '15px', backgroundColor: 'transparent', color: 'var(--text-primary)', border: '2px solid var(--border-color)', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer' };
-const btnCard: React.CSSProperties = { backgroundColor: 'var(--surface-color)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', padding: '20px', borderRadius: '12px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer', textAlign: 'center', height: '100%' };
-const inputStyle: React.CSSProperties = { width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-color)', color: 'var(--text-primary)', fontSize: '1rem', boxSizing: 'border-box' };
-const labelStyle: React.CSSProperties = { display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: 'bold' };
-const modalOverlayStyle: React.CSSProperties = { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(3px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 };
-const modalBoxStyle: React.CSSProperties = { backgroundColor: 'var(--surface-color)', padding: '25px', borderRadius: '16px', width: '85%', maxWidth: '350px', textAlign: 'center', border: '1px solid var(--border-color)', animation: 'modalFadeIn 0.2s ease-out' };
