@@ -26,10 +26,13 @@ export type Encomenda = { id: number; op_numero: string; artigo_codigo: string; 
 export type Ecra = 'home' | 'catalogo' | 'novo_produto' | 'resumo_expedicao' | 'scanner' | 'formulario_saida' | 'relatorio' | 'nova_encomenda' | 'escolher_expedicao' | 'encomendas_pendentes' | 'encomendas_concluidas';
 
 export default function App() {
-  const [autenticado, setAutenticado] = useState<boolean>(() => localStorage.getItem('autenticadoConfecao') === 'true');
-  const [ecraAtual, setEcraAtual] = useState<Ecra>(() => (localStorage.getItem('ecraAtualConfecao') as Ecra) || 'home');
+  // Alterado de localStorage para sessionStorage para limpar a sessão ao fechar a App/Navegador
+  const [autenticado, setAutenticado] = useState<boolean>(() => sessionStorage.getItem('autenticadoConfecao') === 'true');
+  const [ecraAtual, setEcraAtual] = useState<Ecra>(() => (sessionStorage.getItem('ecraAtualConfecao') as Ecra) || 'home');
 
-  useEffect(() => { localStorage.setItem('ecraAtualConfecao', ecraAtual); }, [ecraAtual]);
+  useEffect(() => { 
+    sessionStorage.setItem('ecraAtualConfecao', ecraAtual); 
+  }, [ecraAtual]);
 
   const [artigos, setArtigos] = useState<Artigo[]>([]);
   const [saidas, setSaidas] = useState<Saida[]>([]);
@@ -66,7 +69,8 @@ export default function App() {
 
   const handleLogin = (user: string, pass: string) => {
     if ((user === 'nelaze' && pass === '1988') || (user === 'admin' && pass === 'admin')) {
-      setAutenticado(true); localStorage.setItem('autenticadoConfecao', 'true');
+      setAutenticado(true); 
+      sessionStorage.setItem('autenticadoConfecao', 'true');
     } else {
       mostrarAlerta('Acesso Negado', 'Credenciais incorretas.', 'erro');
     }
@@ -91,7 +95,12 @@ export default function App() {
     const { idParaApagar, tipo } = modalConfirmacao;
     if (!tipo) return;
 
-    if (tipo === 'logout') { setAutenticado(false); localStorage.removeItem('autenticadoConfecao'); setEcraAtual('home'); }
+    if (tipo === 'logout') { 
+      setAutenticado(false); 
+      sessionStorage.removeItem('autenticadoConfecao'); 
+      sessionStorage.removeItem('ecraAtualConfecao');
+      setEcraAtual('home'); 
+    }
     else if (tipo === 'cancelar_lote') { setListaExpedicao([]); setEcraAtual('home'); }
     else if (tipo === 'saida' && idParaApagar) { await supabase.from('saidas').delete().eq('id', idParaApagar); carregarDados(); }
     else if (tipo === 'artigo' && idParaApagar) { await supabase.from('artigos').delete().eq('id', idParaApagar); carregarDados(); }
@@ -109,7 +118,6 @@ export default function App() {
     return Object.values(grupos).sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
   };
 
-  // HELPER PARA CARREGAR IMAGEM PARA O PDF
   const carregarImagem = (url: string): Promise<HTMLImageElement> => {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -119,11 +127,9 @@ export default function App() {
     });
   };
 
-  // GERAÇÃO DE PDF COM LOGÓTIPO E DATA POR EXTENSO
   const gerarPDF = async (grupo: any, comPrecos: boolean) => {
     const doc = new jsPDF();
 
-    // Carregar e desenhar logótipo no topo esquerdo (X: 14, Y: 10, Largura: 22, Altura: 22)
     try {
       const logo = await carregarImagem('/logo.png');
       doc.addImage(logo, 'PNG', 14, 10, 22, 22);
@@ -131,7 +137,6 @@ export default function App() {
       console.warn('Logótipo não carregado no PDF:', err);
     }
 
-    // Título e detalhes do documento alinhados à direita do logo
     doc.setFontSize(16);
     doc.setTextColor(37, 99, 235);
     doc.text(`Nota de Expedição: ${grupo.lote_id}`, 42, 18);
@@ -180,7 +185,6 @@ export default function App() {
       doc.text(`Faturação Total do Lote: ${grupo.total_faturado.toFixed(2)} EUR`, 14, finalY);
     }
 
-    // Data por extenso no final do documento
     finalY += 15;
     const dataExtenso = new Date(grupo.data).toLocaleDateString('pt-PT', {
       day: 'numeric',
