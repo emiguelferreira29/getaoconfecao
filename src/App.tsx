@@ -58,7 +58,8 @@ export default function App() {
   const [editandoPrecoId, setEditandoPrecoId] = useState<number | null>(null);
   const [precoEditado, setPrecoEditado] = useState<string>('');
 
-  const [modalConfirmacao, setModalConfirmacao] = useState<{ aberto: boolean; tipo: 'saida' | 'artigo' | 'logout' | 'cancelar_lote' | 'lote_inteiro' | null; idParaApagar: number | string | null }>({ aberto: false, tipo: null, idParaApagar: null });
+  // --- MODAL DE CONFIRMAÇÃO ---
+  const [modalConfirmacao, setModalConfirmacao] = useState<{ aberto: boolean; tipo: 'saida' | 'artigo' | 'logout' | 'cancelar_lote' | 'lote_inteiro' | 'encomenda_inteira' | null; idParaApagar: number | string | null }>({ aberto: false, tipo: null, idParaApagar: null });
   const [alerta, setAlerta] = useState<{ visivel: boolean; titulo: string; mensagem: string; tipo: 'sucesso' | 'erro' | 'aviso' }>({ visivel: false, titulo: '', mensagem: '', tipo: 'sucesso' });
 
   const mostrarAlerta = (titulo: string, mensagem: string, tipo: 'sucesso' | 'erro' | 'aviso' = 'aviso') => { setAlerta({ visivel: true, titulo, mensagem, tipo }); };
@@ -264,6 +265,8 @@ export default function App() {
   // --- MÉTODOS DE RELATÓRIO E MODAIS ---
   const pedirConfirmacaoApagar = (id: number, tipo: 'saida' | 'artigo') => { setModalConfirmacao({ aberto: true, tipo, idParaApagar: id }); };
   const pedirConfirmacaoApagarLoteInteiro = (lote_id: string) => { setModalConfirmacao({ aberto: true, tipo: 'lote_inteiro', idParaApagar: lote_id }); };
+  const pedirConfirmacaoApagarEncomenda = (op_numero: string) => { setModalConfirmacao({ aberto: true, tipo: 'encomenda_inteira', idParaApagar: op_numero }); };
+
   const pedirConfirmacaoCancelarLote = () => {
     if (listaExpedicao.length > 0) setModalConfirmacao({ aberto: true, tipo: 'cancelar_lote', idParaApagar: null }); else setEcraAtual('home');
   };
@@ -272,14 +275,29 @@ export default function App() {
   const executarAcaoModal = async () => {
     const { idParaApagar, tipo } = modalConfirmacao;
     if (!tipo) return;
-    if (tipo === 'logout') { setAutenticado(false); localStorage.removeItem('autenticadoConfecao'); setEcraAtual('home'); }
-    else if (tipo === 'cancelar_lote') { setListaExpedicao([]); setEcraAtual('home'); }
-    else if (tipo === 'saida' && idParaApagar) { await supabase.from('saidas').delete().eq('id', idParaApagar); carregarDados(); }
-    else if (tipo === 'artigo' && idParaApagar) { await supabase.from('artigos').delete().eq('id', idParaApagar); carregarDados(); }
+
+    if (tipo === 'logout') { 
+      setAutenticado(false); localStorage.removeItem('autenticadoConfecao'); setEcraAtual('home'); 
+    }
+    else if (tipo === 'cancelar_lote') { 
+      setListaExpedicao([]); setEcraAtual('home'); 
+    }
+    else if (tipo === 'saida' && idParaApagar) { 
+      await supabase.from('saidas').delete().eq('id', idParaApagar); carregarDados(); 
+    }
+    else if (tipo === 'artigo' && idParaApagar) { 
+      await supabase.from('artigos').delete().eq('id', idParaApagar); carregarDados(); 
+    }
     else if (tipo === 'lote_inteiro' && idParaApagar) {
       const { error } = await supabase.from('saidas').delete().eq('lote_id', idParaApagar as string);
       if (!error) { carregarDados(); mostrarAlerta('Sucesso', 'A expedição foi eliminada.', 'sucesso'); }
     }
+    else if (tipo === 'encomenda_inteira' && idParaApagar) {
+      const { error } = await supabase.from('encomendas').delete().eq('op_numero', idParaApagar as string);
+      if (!error) { carregarDados(); mostrarAlerta('Sucesso', 'A Ordem de Produção foi apagada!', 'sucesso'); }
+      else mostrarAlerta('Erro', error.message, 'erro');
+    }
+    
     setModalConfirmacao({ aberto: false, tipo: null, idParaApagar: null });
   };
 
@@ -447,7 +465,11 @@ export default function App() {
                         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                           <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{status.icone} {status.texto}</div>
                           {editandoOpId !== grupo.op_numero && (
-                            <button onClick={() => iniciarEdicaoOp(grupo)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '0 5px' }} title="Editar OP">✏️</button>
+                            <>
+                              <button onClick={() => iniciarEdicaoOp(grupo)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '0 5px' }} title="Editar OP">✏️</button>
+                              {/* NOVO: Botão apagar OP */}
+                              <button onClick={() => pedirConfirmacaoApagarEncomenda(grupo.op_numero)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.2rem', padding: '0 5px' }} title="Apagar OP">🗑️</button>
+                            </>
                           )}
                         </div>
                       </div>
@@ -514,7 +536,12 @@ export default function App() {
                     <div key={grupo.op_numero} style={{ backgroundColor: 'var(--surface-color)', border: `1px solid var(--border-color)`, borderRadius: '12px', overflow: 'hidden', opacity: 0.85 }}>
                       <div style={{ padding: '15px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <strong style={{ fontSize: '1.2rem', color: '#22c55e' }}>✅ {grupo.op_numero}</strong>
-                        <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Finalizada</span>
+                        
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Finalizada</span>
+                          {/* NOVO: Botão apagar OP */}
+                          <button onClick={() => pedirConfirmacaoApagarEncomenda(grupo.op_numero)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.2rem', padding: '0 5px' }} title="Apagar OP">🗑️</button>
+                        </div>
                       </div>
                       
                       {lotesAssociados.length > 0 && (
@@ -841,12 +868,17 @@ export default function App() {
               {modalConfirmacao.tipo === 'logout' ? '🚪' : modalConfirmacao.tipo === 'cancelar_lote' ? '🛑' : '⚠️'}
             </div>
             <h3 style={{ margin: '0 0 10px 0', fontSize: '1.2rem', color: 'var(--text-primary)' }}>
-              {modalConfirmacao.tipo === 'logout' ? 'Terminar Sessão' : modalConfirmacao.tipo === 'cancelar_lote' ? 'Cancelar Expedição' : modalConfirmacao.tipo === 'lote_inteiro' ? 'Eliminar Lote Inteiro' : 'Confirmar Eliminação'}
+              {modalConfirmacao.tipo === 'logout' ? 'Terminar Sessão' : 
+               modalConfirmacao.tipo === 'cancelar_lote' ? 'Cancelar Expedição' : 
+               modalConfirmacao.tipo === 'lote_inteiro' ? 'Eliminar Lote Inteiro' : 
+               modalConfirmacao.tipo === 'encomenda_inteira' ? 'Eliminar OP' : 
+               'Confirmar Eliminação'}
             </h3>
             <p style={{ color: 'var(--text-secondary)', marginBottom: '25px', fontSize: '0.95rem', lineHeight: '1.4' }}>
               {modalConfirmacao.tipo === 'logout' ? 'Tem a certeza que deseja sair da sua conta?' : 
                modalConfirmacao.tipo === 'cancelar_lote' ? 'Vai perder as peças que já adicionou a este lote. Deseja cancelar?' : 
                modalConfirmacao.tipo === 'lote_inteiro' ? 'Tem a certeza que deseja apagar a expedição COMPLETA? Todas as peças deste lote vão ser apagadas.' :
+               modalConfirmacao.tipo === 'encomenda_inteira' ? 'Tem a certeza que deseja apagar esta Ordem de Produção? Todos os artigos associados a esta OP serão apagados da lista permanentemente.' :
                <>Tem a certeza que deseja apagar este registo?<br/>Esta ação não pode ser desfeita.</>}
             </p>
             <div style={{ display: 'flex', gap: '10px' }}>
