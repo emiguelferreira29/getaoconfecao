@@ -28,11 +28,10 @@ export default function App() {
   const [novoNome, setNovoNome] = useState('');
   const [novoPreco, setNovoPreco] = useState('');
 
-  // Estados para Edição de Preço no Catálogo (NOVO)
+  // Estados para Edição de Preço no Catálogo
   const [editandoPrecoId, setEditandoPrecoId] = useState<number | null>(null);
   const [precoEditado, setPrecoEditado] = useState<string>('');
 
-  // CORREÇÃO: Isto é o que diz à aplicação para carregar os dados mal abre
   useEffect(() => {
     carregarDados();
   }, []);
@@ -40,7 +39,7 @@ export default function App() {
   async function carregarDados() {
     setACarregar(true);
     
-    // 1. Tentar carregar artigos e capturar o erro
+    // 1. Tentar carregar artigos
     const { data: dadosArtigos, error: erroArtigos } = await supabase.from('artigos').select('*').order('nome');
     
     if (erroArtigos) {
@@ -80,7 +79,6 @@ export default function App() {
     }
   };
 
-  // FUNÇÃO NOVA: Grava o novo preço na base de dados
   const guardarNovoPreco = async (id: number) => {
     const precoNum = parseFloat(precoEditado.replace(',', '.'));
     if (isNaN(precoNum) || precoNum < 0) return alert('Preço inválido.');
@@ -139,16 +137,34 @@ export default function App() {
     }
   };
 
+  // FUNÇÃO NOVA: Apagar um registo de saída
+  const apagarSaida = async (id: number) => {
+    const confirmar = window.confirm('Tem a certeza que deseja APAGAR este registo? Esta ação não pode ser desfeita.');
+    if (!confirmar) return;
+
+    const { error } = await supabase.from('saidas').delete().eq('id', id);
+    
+    if (error) {
+      alert(`Erro ao apagar: ${error.message}`);
+    } else {
+      // Remove o item da lista localmente para ser instantâneo (sem precisar de recarregar tudo)
+      setSaidas(saidas.filter(saida => saida.id !== id));
+    }
+  };
+
   // --- INTERFACE (UI) ---
   if (aCarregar) return <div className="loading">A sincronizar com a base de dados...</div>;
 
   return (
     <div style={{ maxWidth: '600px', margin: '0 auto', minHeight: '100vh', position: 'relative' }}>
       <header style={{ padding: '20px', backgroundColor: 'var(--surface-color)', borderBottom: '1px solid var(--border-color)', position: 'sticky', top: 0, zIndex: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-        <img src="/logo.png" alt="Logótipo" style={{ height: '100px', width: '100px', objectFit: 'contain', borderRadius: '8px' }} />
-        <h1 style={{ fontSize: '1.2rem', margin: 0, color: 'var(--primary-color)' }}>Confeção</h1>
-      </div>
+        
+        {/* LOGÓTIPO ADICIONADO AQUI */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <img src="/logo.png" alt="Logótipo" style={{ height: '35px', width: '35px', objectFit: 'contain', borderRadius: '8px' }} />
+          <h1 style={{ fontSize: '1.2rem', margin: 0, color: 'var(--primary-color)' }}>Confeção</h1>
+        </div>
+
         {ecraAtual !== 'home' && (
           <button onClick={() => setEcraAtual('home')} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.9rem' }}>
             ◀ Voltar
@@ -243,6 +259,7 @@ export default function App() {
           <div style={{ animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Detalhes da Saída</h2>
             <form onSubmit={guardarSaida} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              
               <div>
                 <label style={labelStyle}>Artigo</label>
                 {modoSaida === 'scanner' && artigoSelecionado ? (
@@ -330,7 +347,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 7. RELATÓRIO */}
+        {/* 7. RELATÓRIO ATUALIZADO COM BOTÃO APAGAR */}
         {ecraAtual === 'relatorio' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Histórico Total</h2>
@@ -347,7 +364,8 @@ export default function App() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {saidas.map(saida => (
-                  <div key={saida.id} style={{ backgroundColor: 'var(--surface-color)', padding: '15px', borderRadius: '12px', display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px' }}>
+                  <div key={saida.id} style={{ backgroundColor: 'var(--surface-color)', padding: '15px', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
+                    
                     <div>
                       <strong style={{ display: 'block', marginBottom: '4px' }}>{saida.quantidade}x {saida.artigo_nome}</strong>
                       <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
@@ -357,9 +375,21 @@ export default function App() {
                         {new Date(saida.data).toLocaleDateString('pt-PT')}
                       </small>
                     </div>
-                    <div style={{ fontWeight: 'bold', fontSize: '1.1rem', display: 'flex', alignItems: 'center' }}>
-                      {Number(saida.total_faturado).toFixed(2)}€
+                    
+                    {/* Bloco da direita: Valor e Botão Apagar */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+                      <span style={{ fontWeight: 'bold', fontSize: '1.1rem', color: 'var(--text-primary)' }}>
+                        {Number(saida.total_faturado).toFixed(2)}€
+                      </span>
+                      <button 
+                        onClick={() => apagarSaida(saida.id)} 
+                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.2rem', padding: '4px' }}
+                        title="Apagar Registo"
+                      >
+                        🗑️
+                      </button>
                     </div>
+
                   </div>
                 ))}
               </div>
@@ -390,7 +420,7 @@ const btnCard: React.CSSProperties = {
 };
 
 const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-color)', color: 'var(--text-primary)', fontSize: '1rem'
+  width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-color)', color: 'var(--text-primary)', fontSize: '1rem', boxSizing: 'border-box'
 };
 
 const labelStyle: React.CSSProperties = {
