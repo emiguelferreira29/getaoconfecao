@@ -11,7 +11,7 @@ type Saida = { id: number; artigo_codigo: string; artigo_nome: string; quantidad
 type ItemExpedicao = { artigo_codigo: string; artigo_nome: string; quantidade: number; total_faturado: number; op_numero: string; tamanho: string; };
 type Encomenda = { id: number; op_numero: string; artigo_codigo: string; artigo_nome: string; quantidade_pedida: number; estado: string; data_entrega?: string | null; };
 type ItemNovaOp = { artigo: Artigo; quantidade: number; };
-type Ecra = 'home' | 'catalogo' | 'novo_produto' | 'resumo_expedicao' | 'scanner' | 'formulario_saida' | 'relatorio' | 'nova_encomenda' | 'escolher_expedicao' | 'encomendas_pendentes';
+type Ecra = 'home' | 'catalogo' | 'novo_produto' | 'resumo_expedicao' | 'scanner' | 'formulario_saida' | 'relatorio' | 'nova_encomenda' | 'escolher_expedicao' | 'encomendas_pendentes' | 'encomendas_concluidas';
 
 export default function App() {
   const [autenticado, setAutenticado] = useState<boolean>(() => localStorage.getItem('autenticadoConfecao') === 'true');
@@ -74,7 +74,8 @@ export default function App() {
     const { data: dadosSaidas } = await supabase.from('saidas').select('*').order('data', { ascending: false });
     if (dadosSaidas) setSaidas(dadosSaidas);
 
-    const { data: dadosEnc } = await supabase.from('encomendas').select('*').eq('estado', 'pendente');
+    // Carregamos TODAS as encomendas agora (pendentes e concluídas)
+    const { data: dadosEnc } = await supabase.from('encomendas').select('*');
     if (dadosEnc) setEncomendas(dadosEnc);
     
     setACarregar(false);
@@ -89,7 +90,6 @@ export default function App() {
 
   const handleLogout = () => setModalConfirmacao({ aberto: true, tipo: 'logout', idParaApagar: null });
 
-  // --- NOVA FUNÇÃO: VOLTAR INTELIGENTE ---
   const handleVoltar = () => {
     if (ecraAtual === 'resumo_expedicao') {
       pedirConfirmacaoCancelarLote();
@@ -164,7 +164,6 @@ export default function App() {
       mostrarAlerta('Erro ao atualizar', err.message, 'erro');
     }
   };
-
 
   // --- LÓGICA DE CATÁLOGO ---
   const registarNovoProduto = async (e: React.FormEvent) => {
@@ -296,17 +295,40 @@ export default function App() {
   };
 
   const obterOportunidadesPendentes = () => {
-    const ops = encomendas.map(e => e.op_numero);
+    const ops = encomendas.filter(e => e.estado === 'pendente').map(e => e.op_numero);
     return Array.from(new Set(ops));
   };
 
+  // --- AGRUPAR E ORDENAR OPs PENDENTES ---
   const agruparEncomendasPendentes = () => {
     const grupos: Record<string, { op_numero: string; data_entrega: string | null; itens: Encomenda[] }> = {};
-    encomendas.forEach(enc => {
+    encomendas.filter(e => e.estado === 'pendente').forEach(enc => {
       if (!grupos[enc.op_numero]) grupos[enc.op_numero] = { op_numero: enc.op_numero, data_entrega: enc.data_entrega || null, itens: [] };
       grupos[enc.op_numero].itens.push(enc);
     });
+    
+    // ORDENAÇÃO: Mais antigas (atrasadas) primeiro. Sem data vão para o fim.
+    return Object.values(grupos).sort((a, b) => {
+      const dataA = a.data_entrega ? new Date(a.data_entrega).getTime() : Infinity;
+      const dataB = b.data_entrega ? new Date(b.data_entrega).getTime() : Infinity;
+      return dataA - dataB;
+    });
+  };
+
+  // --- AGRUPAR OPs CONCLUÍDAS ---
+  const agruparEncomendasConcluidas = () => {
+    const grupos: Record<string, { op_numero: string; itens: Encomenda[] }> = {};
+    encomendas.filter(e => e.estado === 'concluida').forEach(enc => {
+      if (!grupos[enc.op_numero]) grupos[enc.op_numero] = { op_numero: enc.op_numero, itens: [] };
+      grupos[enc.op_numero].itens.push(enc);
+    });
     return Object.values(grupos);
+  };
+
+  // --- OBTER LOTES DE UMA OP ESPECÍFICA (Para o ecrã de Concluídas) ---
+  const obterLotesDaOP = (op_numero: string) => {
+    const lotes = saidas.filter(s => s.op_numero === op_numero && s.lote_id).map(s => s.lote_id as string);
+    return Array.from(new Set(lotes));
   };
 
   const calcularStatusData = (dataStr: string | null) => {
@@ -374,7 +396,6 @@ export default function App() {
           <h1 style={{ fontSize: '1.2rem', margin: 0, color: 'var(--primary-color)' }}>Confeção</h1>
         </div>
         <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-          {/* BOTÃO VOLTAR INTELIGENTE */}
           {ecraAtual !== 'home' && (
             <button onClick={handleVoltar} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.9rem' }}>◀ Voltar</button>
           )}
@@ -394,26 +415,31 @@ export default function App() {
               <button onClick={() => setEcraAtual('escolher_expedicao')} style={{...btnPrimary, padding: '20px', fontSize: '1.1rem'}}>📦 Registar Saída</button>
             </div>
             
-            <button onClick={() => setEcraAtual('encomendas_pendentes')} style={{...btnCard, padding: '20px', fontSize: '1.1rem', backgroundColor: 'var(--surface-color)', border: '2px dashed var(--primary-color)', color: 'var(--primary-color)'}}>
-              📋 OPs Pendentes
-            </button>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <button onClick={() => setEcraAtual('encomendas_pendentes')} style={{...btnCard, padding: '20px', fontSize: '1rem', backgroundColor: 'var(--surface-color)', border: '2px dashed #eab308', color: '#eab308'}}>
+                📋 Pendentes
+              </button>
+              <button onClick={() => setEcraAtual('encomendas_concluidas')} style={{...btnCard, padding: '20px', fontSize: '1rem', backgroundColor: 'var(--surface-color)', border: '2px dashed #22c55e', color: '#22c55e'}}>
+                ✅ Concluídas
+              </button>
+            </div>
 
             <div style={{ borderTop: '1px solid var(--border-color)', margin: '10px 0' }}></div>
             
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
               <button onClick={() => setEcraAtual('novo_produto')} style={btnSecondary}>➕ Novo Produto</button>
               <button onClick={() => setEcraAtual('catalogo')} style={btnCard}>📋 Catálogo</button>
-              <button onClick={() => setEcraAtual('relatorio')} style={{...btnCard, gridColumn: 'span 2'}}>📊 Relatórios Totais</button>
+              <button onClick={() => setEcraAtual('relatorio')} style={{...btnCard, gridColumn: 'span 2'}}>📊 Histórico Expedições</button>
             </div>
           </div>
         )}
 
-        {/* ECRÃ OPs PENDENTES COM EDIÇÃO */}
+        {/* ECRÃ OPs PENDENTES COM EDIÇÃO (ORDENADO) */}
         {ecraAtual === 'encomendas_pendentes' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Encomendas por Entregar</h2>
             
-            {encomendas.length === 0 ? (
+            {encomendas.filter(e => e.estado === 'pendente').length === 0 ? (
                <p style={{ color: 'var(--text-secondary)', textAlign: 'center' }}>Não existem encomendas pendentes.</p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -472,6 +498,52 @@ export default function App() {
                           </>
                         )}
                       </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* NOVO ECRÃ: OPs CONCLUÍDAS */}
+        {ecraAtual === 'encomendas_concluidas' && (
+          <div style={{ animation: 'fadeIn 0.3s' }}>
+            <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>OPs Concluídas</h2>
+            
+            {encomendas.filter(e => e.estado === 'concluida').length === 0 ? (
+               <p style={{ color: 'var(--text-secondary)', textAlign: 'center' }}>Não existem OPs concluídas registadas.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {agruparEncomendasConcluidas().map(grupo => {
+                  const lotesAssociados = obterLotesDaOP(grupo.op_numero);
+                  return (
+                    <div key={grupo.op_numero} style={{ backgroundColor: 'var(--surface-color)', border: `1px solid var(--border-color)`, borderRadius: '12px', overflow: 'hidden', opacity: 0.85 }}>
+                      <div style={{ padding: '15px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <strong style={{ fontSize: '1.2rem', color: '#22c55e' }}>✅ {grupo.op_numero}</strong>
+                        <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Finalizada</span>
+                      </div>
+                      
+                      {lotesAssociados.length > 0 && (
+                        <div style={{ padding: '15px', backgroundColor: 'rgba(255,255,255,0.02)' }}>
+                          <h4 style={{ margin: '0 0 10px 0', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Guias de Expedição Associadas:</h4>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {lotesAssociados.map(loteId => (
+                              <button 
+                                key={loteId}
+                                onClick={() => {
+                                  const loteData = agruparSaidas().find(g => g.lote_id === loteId);
+                                  if (loteData) gerarPDF(loteData, false);
+                                }}
+                                style={{ ...btnSecondary, padding: '8px', fontSize: '0.9rem', display: 'flex', justifyContent: 'space-between' }}
+                              >
+                                <span>📦 {loteId}</span>
+                                <span>📄 Imprimir</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
