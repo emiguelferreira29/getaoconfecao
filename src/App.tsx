@@ -9,6 +9,13 @@ type Saida = { id: number; artigo_codigo: string; artigo_nome: string; quantidad
 type Ecra = 'home' | 'catalogo' | 'novo_produto' | 'escolher_saida' | 'scanner' | 'formulario_saida' | 'relatorio';
 
 export default function App() {
+  // --- SISTEMA DE LOGIN ---
+  const [autenticado, setAutenticado] = useState<boolean>(() => {
+    return localStorage.getItem('autenticadoConfecao') === 'true';
+  });
+  const [loginUser, setLoginUser] = useState('');
+  const [loginPass, setLoginPass] = useState('');
+
   // Lê o ecrã da memória do navegador, se não existir abre o 'home'
   const [ecraAtual, setEcraAtual] = useState<Ecra>(() => {
     const ecraGuardado = localStorage.getItem('ecraAtualConfecao');
@@ -45,14 +52,17 @@ export default function App() {
   // Estados para o Modal de Confirmação
   const [modalConfirmacao, setModalConfirmacao] = useState<{ aberto: boolean; tipo: 'saida' | 'artigo' | null; idParaApagar: number | null }>({ aberto: false, tipo: null, idParaApagar: null });
 
+  // Só carrega os dados da base de dados se o utilizador já tiver feito login
   useEffect(() => {
-    carregarDados();
-  }, []);
+    if (autenticado) {
+      carregarDados();
+    }
+  }, [autenticado]);
 
   async function carregarDados() {
     setACarregar(true);
     
-    // 1. Tentar carregar artigos (AGORA ORDENADOS POR CÓDIGO)
+    // 1. Tentar carregar artigos (ORDENADOS POR CÓDIGO)
     const { data: dadosArtigos, error: erroArtigos } = await supabase.from('artigos').select('*').order('codigo');
     
     if (erroArtigos) {
@@ -74,6 +84,28 @@ export default function App() {
     
     setACarregar(false);
   }
+
+  // --- LÓGICA DE AUTENTICAÇÃO ---
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if ((loginUser === 'nelaze' && loginPass === '1988') || (loginUser === 'admin' && loginPass === 'admin')) {
+      setAutenticado(true);
+      localStorage.setItem('autenticadoConfecao', 'true');
+      setLoginUser('');
+      setLoginPass('');
+    } else {
+      alert('Credenciais incorretas. Tente novamente.');
+    }
+  };
+
+  const handleLogout = () => {
+    const confirmar = window.confirm('Tem a certeza que deseja terminar a sessão?');
+    if (confirmar) {
+      setAutenticado(false);
+      localStorage.removeItem('autenticadoConfecao');
+      setEcraAtual('home');
+    }
+  };
 
   // --- LÓGICA DE REGISTO E EDIÇÃO ---
   const registarNovoProduto = async (e: React.FormEvent) => {
@@ -179,27 +211,53 @@ export default function App() {
       }
     }
     
-    // Fecha o modal após a operação
     setModalConfirmacao({ aberto: false, tipo: null, idParaApagar: null });
   };
 
-  // --- INTERFACE (UI) ---
+  // --- ECRÃ DE LOGIN (Mostrado se não estiver autenticado) ---
+  if (!autenticado) {
+    return (
+      <div style={{ maxWidth: '600px', margin: '0 auto', minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '20px', backgroundColor: 'var(--bg-color)', animation: 'fadeIn 0.5s' }}>
+        <img src="/logo.png" alt="Logótipo" style={{ width: '130px', height: '130px', objectFit: 'contain', borderRadius: '24px', marginBottom: '20px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+        <h2 style={{ fontSize: '1.8rem', color: 'var(--primary-color)', marginBottom: '30px' }}>Bem-vindo</h2>
+        
+        <form onSubmit={handleLogin} style={{ width: '100%', maxWidth: '300px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+          <div>
+            <label style={labelStyle}>Utilizador</label>
+            <input type="text" value={loginUser} onChange={e => setLoginUser(e.target.value)} required style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Palavra-passe</label>
+            <input type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} required style={inputStyle} />
+          </div>
+          <button type="submit" style={{ ...btnPrimary, marginTop: '10px' }}>Entrar</button>
+        </form>
+      </div>
+    );
+  }
+
+  // --- INTERFACE PRINCIPAL (UI) ---
   if (aCarregar) return <div className="loading">A sincronizar com a base de dados...</div>;
 
   return (
     <div style={{ maxWidth: '600px', margin: '0 auto', minHeight: '100vh', position: 'relative' }}>
       
-      {/* CABEÇALHO */}
+      {/* CABEÇALHO ATUALIZADO COM BOTÃO DE SAÍDA */}
       <header style={{ padding: '20px', backgroundColor: 'var(--surface-color)', borderBottom: '1px solid var(--border-color)', position: 'sticky', top: 0, zIndex: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <img src="/logo.png" alt="Logótipo" style={{ height: '35px', width: '35px', objectFit: 'contain', borderRadius: '8px' }} />
           <h1 style={{ fontSize: '1.2rem', margin: 0, color: 'var(--primary-color)' }}>Confeção</h1>
         </div>
-        {ecraAtual !== 'home' && (
-          <button onClick={() => setEcraAtual('home')} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.9rem' }}>
-            ◀ Voltar
+        <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+          {ecraAtual !== 'home' && (
+            <button onClick={() => setEcraAtual('home')} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.9rem' }}>
+              ◀ Voltar
+            </button>
+          )}
+          <button onClick={handleLogout} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.4rem' }} title="Terminar Sessão">
+            🚪
           </button>
-        )}
+        </div>
       </header>
 
       <main style={{ padding: '20px', paddingBottom: '90px' }}>
@@ -481,7 +539,6 @@ const labelStyle: React.CSSProperties = {
   display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: 'bold'
 };
 
-// Estilos para o Modal de Confirmação
 const modalOverlayStyle: React.CSSProperties = {
   position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', 
   backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(3px)',
