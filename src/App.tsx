@@ -7,16 +7,20 @@ import './index.css';
 
 // COMPONENTES IMPORTADOS
 import Login from './components/Login';
-import { ModalAlerta, ModalConfirmacao, btnPrimary, btnSecondary, btnCard, inputStyle, labelStyle } from './components/Modais';
+import { ModalAlerta, ModalConfirmacao, btnPrimary, btnSecondary, btnCard, inputStyle, labelStyle, modalOverlayStyle, modalBoxStyle } from './components/Modais';
 import type { TipoModalConfirmacao } from './components/Modais';
 
+// PÁGINAS IMPORTADAS
+import NovoProduto from './pages/NovoProduto';
+import Catalogo from './pages/Catalogo';
+
 // --- TIPOS DE DADOS ---
-type Artigo = { id: number; codigo: string; nome: string; preco: number; };
+export type Artigo = { id: number; codigo: string; nome: string; preco: number; };
 type Saida = { id: number; artigo_codigo: string; artigo_nome: string; quantidade: number; total_faturado: number; data: string; op_numero: string; tamanho: string; lote_id: string | null; };
 type ItemExpedicao = { artigo_codigo: string; artigo_nome: string; quantidade: number; total_faturado: number; op_numero: string; tamanho: string; };
 type Encomenda = { id: number; op_numero: string; artigo_codigo: string; artigo_nome: string; quantidade_pedida: number; estado: string; data_entrega?: string | null; };
 type ItemNovaOp = { artigo: Artigo; quantidade: number; };
-type Ecra = 'home' | 'catalogo' | 'novo_produto' | 'resumo_expedicao' | 'scanner' | 'formulario_saida' | 'relatorio' | 'nova_encomenda' | 'escolher_expedicao' | 'encomendas_pendentes' | 'encomendas_concluidas';
+export type Ecra = 'home' | 'catalogo' | 'novo_produto' | 'resumo_expedicao' | 'scanner' | 'formulario_saida' | 'relatorio' | 'nova_encomenda' | 'escolher_expedicao' | 'encomendas_pendentes' | 'encomendas_concluidas';
 
 export default function App() {
   const [autenticado, setAutenticado] = useState<boolean>(() => localStorage.getItem('autenticadoConfecao') === 'true');
@@ -29,39 +33,32 @@ export default function App() {
   const [encomendas, setEncomendas] = useState<Encomenda[]>([]);
   const [aCarregar, setACarregar] = useState<boolean>(true);
   
-  // Estados para Expedição
+  // Estados Expedição
   const [modoExpedicao, setModoExpedicao] = useState<'livre' | 'op' | null>(null);
   const [opSelecionada, setOpSelecionada] = useState<string>('');
   const [listaExpedicao, setListaExpedicao] = useState<ItemExpedicao[]>([]);
   
-  // Estados para nova OP (Entrada)
+  // Estados Nova OP
   const [novaOpNumero, setNovaOpNumero] = useState('');
   const [novaOpDataEntrega, setNovaOpDataEntrega] = useState('');
   const [novaOpLista, setNovaOpLista] = useState<ItemNovaOp[]>([]);
   const [novaOpArtigo, setNovaOpArtigo] = useState<Artigo | null>(null);
   const [novaOpQtd, setNovaOpQtd] = useState('');
 
-  // Estados para Edição de OP Pendente
+  // Estados Edição de OP Pendente
   const [editandoOpId, setEditandoOpId] = useState<string | null>(null);
   const [editOpData, setEditOpData] = useState<string>('');
   const [editOpQuantidades, setEditOpQuantidades] = useState<Record<number, number>>({});
 
-  // Estados para Formulario Saida
+  // Estados Formulario Saida
   const [modoSaida, setModoSaida] = useState<'scanner' | 'manual' | null>(null);
   const [artigoSelecionado, setArtigoSelecionado] = useState<Artigo | null>(null);
   const [pausarCamara, setPausarCamara] = useState<boolean>(false);
   const [formOP, setFormOP] = useState('');
   const [formTamanho, setFormTamanho] = useState('');
   const [formQtd, setFormQtd] = useState('');
-  
-  // Estados Catalogo
-  const [novoCod, setNovoCod] = useState('');
-  const [novoNome, setNovoNome] = useState('');
-  const [novoPreco, setNovoPreco] = useState('');
-  const [editandoPrecoId, setEditandoPrecoId] = useState<number | null>(null);
-  const [precoEditado, setPrecoEditado] = useState<string>('');
 
-  // ESTADOS DOS MODAIS
+  // ESTADOS MODAIS
   const [modalConfirmacao, setModalConfirmacao] = useState<{ aberto: boolean; tipo: TipoModalConfirmacao; idParaApagar: number | string | null }>({ aberto: false, tipo: null, idParaApagar: null });
   const [alerta, setAlerta] = useState<{ visivel: boolean; titulo: string; mensagem: string; tipo: 'sucesso' | 'erro' | 'aviso' }>({ visivel: false, titulo: '', mensagem: '', tipo: 'sucesso' });
 
@@ -95,16 +92,12 @@ export default function App() {
   const handleLogout = () => setModalConfirmacao({ aberto: true, tipo: 'logout', idParaApagar: null });
 
   const handleVoltar = () => {
-    if (ecraAtual === 'resumo_expedicao') {
-      pedirConfirmacaoCancelarLote();
-    } else if (ecraAtual === 'scanner' || ecraAtual === 'formulario_saida') {
-      setEcraAtual('resumo_expedicao');
-    } else {
-      setEcraAtual('home');
-    }
+    if (ecraAtual === 'resumo_expedicao') { pedirConfirmacaoCancelarLote(); } 
+    else if (ecraAtual === 'scanner' || ecraAtual === 'formulario_saida') { setEcraAtual('resumo_expedicao'); } 
+    else { setEcraAtual('home'); }
   };
 
-  // REGISTAR ENTRADA
+  // MÉTODOS NOVA OP
   const adicionarItemNovaOp = (e: React.FormEvent) => {
     e.preventDefault();
     if (!novaOpArtigo) return mostrarAlerta('Atenção', 'Selecione um artigo.', 'aviso');
@@ -117,21 +110,13 @@ export default function App() {
   const guardarNovaEncomenda = async () => {
     if (!novaOpNumero) return mostrarAlerta('Atenção', 'Indique o número da OP.', 'aviso');
     if (novaOpLista.length === 0) return mostrarAlerta('Atenção', 'Adicione pelo menos um artigo à OP.', 'aviso');
-
-    const dadosParaInserir = novaOpLista.map(item => ({
-      op_numero: novaOpNumero, artigo_codigo: item.artigo.codigo, artigo_nome: item.artigo.nome,
-      quantidade_pedida: item.quantidade, data_entrega: novaOpDataEntrega ? novaOpDataEntrega : null
-    }));
-
+    const dadosParaInserir = novaOpLista.map(item => ({ op_numero: novaOpNumero, artigo_codigo: item.artigo.codigo, artigo_nome: item.artigo.nome, quantidade_pedida: item.quantidade, data_entrega: novaOpDataEntrega ? novaOpDataEntrega : null }));
     const { error } = await supabase.from('encomendas').insert(dadosParaInserir);
     if (error) mostrarAlerta('Erro', error.message, 'erro');
-    else {
-      mostrarAlerta('Sucesso', `A ${novaOpNumero} foi registada com sucesso!`, 'sucesso');
-      setNovaOpNumero(''); setNovaOpDataEntrega(''); setNovaOpLista([]); carregarDados(); setEcraAtual('home');
-    }
+    else { mostrarAlerta('Sucesso', `A ${novaOpNumero} foi registada com sucesso!`, 'sucesso'); setNovaOpNumero(''); setNovaOpDataEntrega(''); setNovaOpLista([]); carregarDados(); setEcraAtual('home'); }
   };
 
-  // EDIÇÃO DE OP PENDENTE
+  // MÉTODOS EDIÇÃO OP
   const iniciarEdicaoOp = (grupo: any) => {
     setEditandoOpId(grupo.op_numero); setEditOpData(grupo.data_entrega || '');
     const qtds: Record<number, number> = {};
@@ -147,25 +132,8 @@ export default function App() {
         const { error } = await supabase.from('encomendas').update({ quantidade_pedida: qtd, data_entrega: editOpData ? editOpData : null }).eq('id', id);
         if (error) throw error;
       }
-      mostrarAlerta('Sucesso', `A ${op_numero} foi atualizada!`, 'sucesso');
-      setEditandoOpId(null); carregarDados();
+      mostrarAlerta('Sucesso', `A ${op_numero} foi atualizada!`, 'sucesso'); setEditandoOpId(null); carregarDados();
     } catch (err: any) { mostrarAlerta('Erro ao atualizar', err.message, 'erro'); }
-  };
-
-  // CATÁLOGO
-  const registarNovoProduto = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const precoNum = parseFloat(novoPreco.replace(',', '.'));
-    if (!novoCod || !novoNome || isNaN(precoNum)) return mostrarAlerta('Atenção', 'Preencha todos os campos corretamente.', 'aviso');
-    const { error } = await supabase.from('artigos').insert({ codigo: novoCod, nome: novoNome, preco: precoNum });
-    if (error) mostrarAlerta('Erro', error.message, 'erro'); else { mostrarAlerta('Sucesso', 'Produto registado!', 'sucesso'); setNovoCod(''); setNovoNome(''); setNovoPreco(''); carregarDados(); setEcraAtual('catalogo'); }
-  };
-
-  const guardarNovoPreco = async (id: number) => {
-    const precoNum = parseFloat(precoEditado.replace(',', '.'));
-    if (isNaN(precoNum) || precoNum < 0) return;
-    const { error } = await supabase.from('artigos').update({ preco: precoNum }).eq('id', id);
-    if (!error) { setEditandoPrecoId(null); carregarDados(); }
   };
 
   // EXPEDIÇÃO
@@ -223,7 +191,7 @@ export default function App() {
     setListaExpedicao([]); setFormOP(''); setFormTamanho(''); carregarDados(); setEcraAtual('home');
   };
 
-  // MÉTODOS DE MODAIS
+  // MÉTODOS MODAIS E DADOS
   const pedirConfirmacaoApagar = (id: number, tipo: 'saida' | 'artigo') => { setModalConfirmacao({ aberto: true, tipo, idParaApagar: id }); };
   const pedirConfirmacaoApagarLoteInteiro = (lote_id: string) => { setModalConfirmacao({ aberto: true, tipo: 'lote_inteiro', idParaApagar: lote_id }); };
   const pedirConfirmacaoApagarEncomenda = (op_numero: string) => { setModalConfirmacao({ aberto: true, tipo: 'encomenda_inteira', idParaApagar: op_numero }); };
@@ -342,6 +310,19 @@ export default function App() {
           </div>
         )}
 
+        {/* PÁGINAS RENDERIZADAS A PARTIR DOS NOVOS COMPONENTES */}
+        {ecraAtual === 'novo_produto' && (
+          <NovoProduto setEcraAtual={setEcraAtual} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} />
+        )}
+
+        {ecraAtual === 'catalogo' && (
+          <Catalogo artigos={artigos} carregarDados={carregarDados} pedirConfirmacaoApagar={pedirConfirmacaoApagar} />
+        )}
+
+        {/* ======================================================= */}
+        {/* O RESTO DOS ECRÃS CONTINUAM AQUI (VAMOS DIVIDIR A SEGUIR) */}
+        {/* ======================================================= */}
+        
         {ecraAtual === 'encomendas_pendentes' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Encomendas por Entregar</h2>
@@ -544,44 +525,6 @@ export default function App() {
               </div>
               <button type="submit" style={btnPrimary}>➕ Adicionar ao Lote</button>
             </form>
-          </div>
-        )}
-
-        {ecraAtual === 'novo_produto' && (
-          <div style={{ animation: 'fadeIn 0.3s' }}>
-            <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Novo Produto</h2>
-            <form onSubmit={registarNovoProduto} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <div><label style={labelStyle}>Código do Artigo (ex: ART-011)</label><input type="text" value={novoCod} onChange={e => setNovoCod(e.target.value)} required style={inputStyle} /></div>
-              <div><label style={labelStyle}>Nome do Artigo</label><input type="text" value={novoNome} onChange={e => setNovoNome(e.target.value)} required style={inputStyle} /></div>
-              <div><label style={labelStyle}>Preço Unitário (€)</label><input type="number" step="0.01" value={novoPreco} onChange={e => setNovoPreco(e.target.value)} required style={inputStyle} /></div>
-              <button type="submit" style={btnPrimary}>Guardar Produto</button>
-            </form>
-          </div>
-        )}
-
-        {ecraAtual === 'catalogo' && (
-          <div style={{ animation: 'fadeIn 0.3s' }}>
-            <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Catálogo ({artigos.length})</h2>
-            <div style={{ display: 'grid', gap: '10px' }}>
-              {artigos.map(artigo => (
-                <div key={artigo.id} style={{ backgroundColor: 'var(--surface-color)', padding: '15px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div><strong style={{ display: 'block', fontSize: '1.1rem' }}>{artigo.nome}</strong><small style={{ color: 'var(--text-secondary)' }}>{artigo.codigo}</small></div>
-                  {editandoPrecoId === artigo.id ? (
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      <input type="number" step="0.01" value={precoEditado} onChange={e => setPrecoEditado(e.target.value)} autoFocus style={{ ...inputStyle, width: '80px', padding: '8px' }} />
-                      <button onClick={() => guardarNovoPreco(artigo.id)} style={{ backgroundColor: '#22c55e', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>✓</button>
-                      <button onClick={() => setEditandoPrecoId(null)} style={{ backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>✕</button>
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ color: 'var(--primary-color)', fontWeight: 'bold', fontSize: '1.1rem', marginRight: '4px' }}>{Number(artigo.preco).toFixed(2)}€</span>
-                      <button onClick={() => { setEditandoPrecoId(artigo.id); setPrecoEditado(artigo.preco.toString()); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '4px' }}>✏️</button>
-                      <button onClick={() => pedirConfirmacaoApagar(artigo.id, 'artigo')} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.2rem', padding: '4px' }}>🗑️</button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
           </div>
         )}
 
