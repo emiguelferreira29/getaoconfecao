@@ -7,7 +7,8 @@ import './index.css';
 
 // COMPONENTES IMPORTADOS
 import Login from './components/Login';
-import { ModalAlerta, ModalConfirmacao, TipoModalConfirmacao, btnPrimary, btnSecondary, btnCard, inputStyle, labelStyle } from './components/Modais';
+import { ModalAlerta, ModalConfirmacao, btnPrimary, btnSecondary, btnCard, inputStyle, labelStyle } from './components/Modais';
+import type { TipoModalConfirmacao } from './components/Modais';
 
 // --- TIPOS DE DADOS ---
 type Artigo = { id: number; codigo: string; nome: string; preco: number; };
