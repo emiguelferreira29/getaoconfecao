@@ -42,7 +42,7 @@ export default function App() {
   const [editandoPrecoId, setEditandoPrecoId] = useState<number | null>(null);
   const [precoEditado, setPrecoEditado] = useState<string>('');
 
-  // Estados para o Modal de Confirmação (AGORA SUPORTA ARTIGOS E SAÍDAS)
+  // Estados para o Modal de Confirmação
   const [modalConfirmacao, setModalConfirmacao] = useState<{ aberto: boolean; tipo: 'saida' | 'artigo' | null; idParaApagar: number | null }>({ aberto: false, tipo: null, idParaApagar: null });
 
   useEffect(() => {
@@ -52,8 +52,8 @@ export default function App() {
   async function carregarDados() {
     setACarregar(true);
     
-    // 1. Tentar carregar artigos
-    const { data: dadosArtigos, error: erroArtigos } = await supabase.from('artigos').select('*').order('nome');
+    // 1. Tentar carregar artigos (AGORA ORDENADOS POR CÓDIGO)
+    const { data: dadosArtigos, error: erroArtigos } = await supabase.from('artigos').select('*').order('codigo');
     
     if (erroArtigos) {
       alert(`ERRO SUPABASE (Artigos): ${erroArtigos.message}`);
@@ -150,7 +150,7 @@ export default function App() {
     }
   };
 
-  // FUNÇÕES DE ELIMINAÇÃO (ATUALIZADAS PARA SUPORTAR AMBOS)
+  // FUNÇÕES DE ELIMINAÇÃO
   const pedirConfirmacaoApagar = (id: number, tipo: 'saida' | 'artigo') => {
     setModalConfirmacao({ aberto: true, tipo, idParaApagar: id });
   };
@@ -369,7 +369,6 @@ export default function App() {
                       >
                         ✏️
                       </button>
-                      {/* NOVO: Botão Apagar Artigo */}
                       <button 
                         onClick={() => pedirConfirmacaoApagar(artigo.id, 'artigo')} 
                         style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.2rem', padding: '4px' }}
