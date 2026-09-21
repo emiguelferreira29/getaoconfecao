@@ -38,6 +38,11 @@ export default function App() {
   const [novaOpArtigo, setNovaOpArtigo] = useState<Artigo | null>(null);
   const [novaOpQtd, setNovaOpQtd] = useState('');
 
+  // Estados para Edição de OP Pendente
+  const [editandoOpId, setEditandoOpId] = useState<string | null>(null);
+  const [editOpData, setEditOpData] = useState<string>('');
+  const [editOpQuantidades, setEditOpQuantidades] = useState<Record<number, number>>({});
+
   // Estados para Formulario Saida
   const [modoSaida, setModoSaida] = useState<'scanner' | 'manual' | null>(null);
   const [artigoSelecionado, setArtigoSelecionado] = useState<Artigo | null>(null);
@@ -69,7 +74,6 @@ export default function App() {
     const { data: dadosSaidas } = await supabase.from('saidas').select('*').order('data', { ascending: false });
     if (dadosSaidas) setSaidas(dadosSaidas);
 
-    // Carregar apenas Encomendas Pendentes
     const { data: dadosEnc } = await supabase.from('encomendas').select('*').eq('estado', 'pendente');
     if (dadosEnc) setEncomendas(dadosEnc);
     
@@ -84,6 +88,17 @@ export default function App() {
   };
 
   const handleLogout = () => setModalConfirmacao({ aberto: true, tipo: 'logout', idParaApagar: null });
+
+  // --- NOVA FUNÇÃO: VOLTAR INTELIGENTE ---
+  const handleVoltar = () => {
+    if (ecraAtual === 'resumo_expedicao') {
+      pedirConfirmacaoCancelarLote();
+    } else if (ecraAtual === 'scanner' || ecraAtual === 'formulario_saida') {
+      setEcraAtual('resumo_expedicao');
+    } else {
+      setEcraAtual('home');
+    }
+  };
 
   // --- REGISTAR NOVA ENCOMENDA (ENTRADA) ---
   const adicionarItemNovaOp = (e: React.FormEvent) => {
@@ -104,7 +119,7 @@ export default function App() {
       artigo_codigo: item.artigo.codigo,
       artigo_nome: item.artigo.nome,
       quantidade_pedida: item.quantidade,
-      data_entrega: novaOpDataEntrega ? novaOpDataEntrega : null // Grava a data se existir
+      data_entrega: novaOpDataEntrega ? novaOpDataEntrega : null
     }));
 
     const { error } = await supabase.from('encomendas').insert(dadosParaInserir);
@@ -114,6 +129,42 @@ export default function App() {
       setNovaOpNumero(''); setNovaOpDataEntrega(''); setNovaOpLista([]); carregarDados(); setEcraAtual('home');
     }
   };
+
+  // --- EDIÇÃO DE OP PENDENTE ---
+  const iniciarEdicaoOp = (grupo: any) => {
+    setEditandoOpId(grupo.op_numero);
+    setEditOpData(grupo.data_entrega || '');
+    const qtds: Record<number, number> = {};
+    grupo.itens.forEach((item: Encomenda) => {
+      qtds[item.id] = item.quantidade_pedida;
+    });
+    setEditOpQuantidades(qtds);
+  };
+
+  const guardarEdicaoOp = async (op_numero: string) => {
+    try {
+      const itensParaAtualizar = Object.keys(editOpQuantidades);
+      for (const idStr of itensParaAtualizar) {
+        const id = parseInt(idStr);
+        const qtd = editOpQuantidades[id];
+        const { error } = await supabase
+          .from('encomendas')
+          .update({
+            quantidade_pedida: qtd,
+            data_entrega: editOpData ? editOpData : null
+          })
+          .eq('id', id);
+        
+        if (error) throw error;
+      }
+      mostrarAlerta('Sucesso', `A ${op_numero} foi atualizada!`, 'sucesso');
+      setEditandoOpId(null);
+      carregarDados();
+    } catch (err: any) {
+      mostrarAlerta('Erro ao atualizar', err.message, 'erro');
+    }
+  };
+
 
   // --- LÓGICA DE CATÁLOGO ---
   const registarNovoProduto = async (e: React.FormEvent) => {
@@ -249,7 +300,6 @@ export default function App() {
     return Array.from(new Set(ops));
   };
 
-  // --- NOVA LÓGICA: AGRUPAR OPs PENDENTES E CALCULAR STATUS DA DATA ---
   const agruparEncomendasPendentes = () => {
     const grupos: Record<string, { op_numero: string; data_entrega: string | null; itens: Encomenda[] }> = {};
     encomendas.forEach(enc => {
@@ -269,9 +319,9 @@ export default function App() {
     const diffTime = dataEntrega.getTime() - hoje.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-    if (diffDays < 0) return { corBorda: '#ef4444', icone: '🔴', texto: `Atrasada (${Math.abs(diffDays)} dias)` }; // Vermelho
-    if (diffDays <= 5) return { corBorda: '#eab308', icone: '🟡', texto: `Atenção: Falta(m) ${diffDays} dia(s)` }; // Amarelo
-    return { corBorda: '#22c55e', icone: '🟢', texto: `No prazo (${new Date(dataStr).toLocaleDateString('pt-PT')})` }; // Verde
+    if (diffDays < 0) return { corBorda: '#ef4444', icone: '🔴', texto: `Atrasada (${Math.abs(diffDays)} dias)` };
+    if (diffDays <= 5) return { corBorda: '#eab308', icone: '🟡', texto: `Atenção: Falta(m) ${diffDays} dia(s)` };
+    return { corBorda: '#22c55e', icone: '🟢', texto: `No prazo (${new Date(dataStr).toLocaleDateString('pt-PT')})` };
   };
 
   // --- GERAÇÃO DE PDF ---
@@ -324,8 +374,9 @@ export default function App() {
           <h1 style={{ fontSize: '1.2rem', margin: 0, color: 'var(--primary-color)' }}>Confeção</h1>
         </div>
         <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+          {/* BOTÃO VOLTAR INTELIGENTE */}
           {ecraAtual !== 'home' && (
-            <button onClick={() => ecraAtual === 'resumo_expedicao' ? pedirConfirmacaoCancelarLote() : setEcraAtual('home')} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.9rem' }}>◀ Voltar</button>
+            <button onClick={handleVoltar} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.9rem' }}>◀ Voltar</button>
           )}
           <button onClick={handleLogout} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.4rem' }} title="Terminar Sessão">🚪</button>
         </div>
@@ -333,7 +384,7 @@ export default function App() {
 
       <main style={{ padding: '20px', paddingBottom: '90px' }}>
         
-        {/* PÁGINA INICIAL ATUALIZADA */}
+        {/* PÁGINA INICIAL */}
         {ecraAtual === 'home' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '10px' }}>Painel Principal</h2>
@@ -357,7 +408,7 @@ export default function App() {
           </div>
         )}
 
-        {/* ECRÃ OPs PENDENTES (NOVO) */}
+        {/* ECRÃ OPs PENDENTES COM EDIÇÃO */}
         {ecraAtual === 'encomendas_pendentes' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Encomendas por Entregar</h2>
@@ -372,16 +423,54 @@ export default function App() {
                     <div key={grupo.op_numero} style={{ backgroundColor: 'var(--surface-color)', border: `2px solid ${status.corBorda}`, borderRadius: '12px', overflow: 'hidden' }}>
                       <div style={{ padding: '15px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.02)' }}>
                         <strong style={{ fontSize: '1.2rem' }}>{grupo.op_numero}</strong>
-                        <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{status.icone} {status.texto}</div>
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                          <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{status.icone} {status.texto}</div>
+                          {editandoOpId !== grupo.op_numero && (
+                            <button onClick={() => iniciarEdicaoOp(grupo)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '0 5px' }} title="Editar OP">✏️</button>
+                          )}
+                        </div>
                       </div>
+                      
                       <div style={{ padding: '15px' }}>
-                        <h4 style={{ margin: '0 0 10px 0', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Falta produzir/entregar:</h4>
-                        {grupo.itens.map(item => (
-                          <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px dashed rgba(255,255,255,0.05)' }}>
-                            <span>{item.artigo_nome}</span>
-                            <strong style={{ color: 'var(--primary-color)' }}>{item.quantidade_pedida} un.</strong>
+                        {editandoOpId === grupo.op_numero ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', animation: 'fadeIn 0.2s' }}>
+                            <div>
+                              <label style={{...labelStyle, fontSize: '0.85rem'}}>Nova Data de Entrega:</label>
+                              <input type="date" value={editOpData} onChange={e => setEditOpData(e.target.value)} style={{...inputStyle, padding: '8px'}} />
+                            </div>
+                            
+                            <div>
+                              <label style={{...labelStyle, fontSize: '0.85rem'}}>Ajustar Quantidades (Faltam entregar):</label>
+                              {grupo.itens.map(item => (
+                                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px dashed rgba(255,255,255,0.05)' }}>
+                                  <span style={{ fontSize: '0.95rem' }}>{item.artigo_nome}</span>
+                                  <input 
+                                    type="number" 
+                                    min="1" 
+                                    value={editOpQuantidades[item.id] || ''} 
+                                    onChange={e => setEditOpQuantidades({...editOpQuantidades, [item.id]: parseInt(e.target.value) || 0})}
+                                    style={{...inputStyle, width: '90px', padding: '6px', textAlign: 'center'}}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                            
+                            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                              <button onClick={() => setEditandoOpId(null)} style={{...btnSecondary, padding: '10px', flex: 1}}>Cancelar</button>
+                              <button onClick={() => guardarEdicaoOp(grupo.op_numero)} style={{...btnPrimary, backgroundColor: '#22c55e', padding: '10px', flex: 1}}>Guardar</button>
+                            </div>
                           </div>
-                        ))}
+                        ) : (
+                          <>
+                            <h4 style={{ margin: '0 0 10px 0', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Falta produzir/entregar:</h4>
+                            {grupo.itens.map(item => (
+                              <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px dashed rgba(255,255,255,0.05)' }}>
+                                <span>{item.artigo_nome}</span>
+                                <strong style={{ color: 'var(--primary-color)' }}>{item.quantidade_pedida} un.</strong>
+                              </div>
+                            ))}
+                          </>
+                        )}
                       </div>
                     </div>
                   );
@@ -391,7 +480,7 @@ export default function App() {
           </div>
         )}
 
-        {/* REGISTAR ENTRADA COM DATA DE ENTREGA */}
+        {/* REGISTAR ENTRADA */}
         {ecraAtual === 'nova_encomenda' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Nova Encomenda (Entrada)</h2>
