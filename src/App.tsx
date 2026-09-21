@@ -9,13 +9,13 @@ type Saida = { id: number; artigo_codigo: string; artigo_nome: string; quantidad
 type Ecra = 'home' | 'catalogo' | 'novo_produto' | 'escolher_saida' | 'scanner' | 'formulario_saida' | 'relatorio';
 
 export default function App() {
-  // NOVO: Lê o ecrã da memória do navegador, se não existir abre o 'home'
+  // Lê o ecrã da memória do navegador, se não existir abre o 'home'
   const [ecraAtual, setEcraAtual] = useState<Ecra>(() => {
     const ecraGuardado = localStorage.getItem('ecraAtualConfecao');
     return (ecraGuardado as Ecra) || 'home';
   });
 
-  // NOVO: Sempre que o ecrã muda, guarda a posição na memória do navegador
+  // Sempre que o ecrã muda, guarda a posição na memória do navegador
   useEffect(() => {
     localStorage.setItem('ecraAtualConfecao', ecraAtual);
   }, [ecraAtual]);
@@ -42,8 +42,8 @@ export default function App() {
   const [editandoPrecoId, setEditandoPrecoId] = useState<number | null>(null);
   const [precoEditado, setPrecoEditado] = useState<string>('');
 
-  // Estados para o Modal de Confirmação
-  const [modalConfirmacao, setModalConfirmacao] = useState<{ aberto: boolean; idParaApagar: number | null }>({ aberto: false, idParaApagar: null });
+  // Estados para o Modal de Confirmação (AGORA SUPORTA ARTIGOS E SAÍDAS)
+  const [modalConfirmacao, setModalConfirmacao] = useState<{ aberto: boolean; tipo: 'saida' | 'artigo' | null; idParaApagar: number | null }>({ aberto: false, tipo: null, idParaApagar: null });
 
   useEffect(() => {
     carregarDados();
@@ -102,7 +102,7 @@ export default function App() {
       alert(`Erro ao atualizar: ${error.message}`);
     } else {
       setEditandoPrecoId(null);
-      carregarDados(); // Recarrega a lista para mostrar o novo valor
+      carregarDados(); 
     }
   };
 
@@ -150,29 +150,37 @@ export default function App() {
     }
   };
 
-  // FUNÇÕES NOVAS: Gerir o Modal e Apagar o Registo
-  const pedirConfirmacaoApagar = (id: number) => {
-    setModalConfirmacao({ aberto: true, idParaApagar: id });
+  // FUNÇÕES DE ELIMINAÇÃO (ATUALIZADAS PARA SUPORTAR AMBOS)
+  const pedirConfirmacaoApagar = (id: number, tipo: 'saida' | 'artigo') => {
+    setModalConfirmacao({ aberto: true, tipo, idParaApagar: id });
   };
 
   const cancelarApagar = () => {
-    setModalConfirmacao({ aberto: false, idParaApagar: null });
+    setModalConfirmacao({ aberto: false, tipo: null, idParaApagar: null });
   };
 
   const executarApagar = async () => {
-    const id = modalConfirmacao.idParaApagar;
-    if (!id) return;
+    const { idParaApagar, tipo } = modalConfirmacao;
+    if (!idParaApagar || !tipo) return;
 
-    const { error } = await supabase.from('saidas').delete().eq('id', id);
-    
-    if (error) {
-      alert(`Erro ao apagar: ${error.message}`);
-    } else {
-      // Remove o item da lista localmente
-      setSaidas(saidas.filter(saida => saida.id !== id));
+    if (tipo === 'saida') {
+      const { error } = await supabase.from('saidas').delete().eq('id', idParaApagar);
+      if (error) {
+        alert(`Erro ao apagar saída: ${error.message}`);
+      } else {
+        setSaidas(saidas.filter(saida => saida.id !== idParaApagar));
+      }
+    } else if (tipo === 'artigo') {
+      const { error } = await supabase.from('artigos').delete().eq('id', idParaApagar);
+      if (error) {
+        alert(`Erro ao apagar artigo: ${error.message}`);
+      } else {
+        setArtigos(artigos.filter(artigo => artigo.id !== idParaApagar));
+      }
     }
-    // Fecha o modal em qualquer dos casos
-    setModalConfirmacao({ aberto: false, idParaApagar: null });
+    
+    // Fecha o modal após a operação
+    setModalConfirmacao({ aberto: false, tipo: null, idParaApagar: null });
   };
 
   // --- INTERFACE (UI) ---
@@ -324,7 +332,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 6. CATÁLOGO COM EDIÇÃO */}
+        {/* 6. CATÁLOGO COM EDIÇÃO E ELIMINAÇÃO */}
         {ecraAtual === 'catalogo' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Catálogo ({artigos.length})</h2>
@@ -350,16 +358,24 @@ export default function App() {
                       <button onClick={() => setEditandoPrecoId(null)} style={{ backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>✕</button>
                     </div>
                   ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <span style={{ color: 'var(--primary-color)', fontWeight: 'bold', fontSize: '1.1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ color: 'var(--primary-color)', fontWeight: 'bold', fontSize: '1.1rem', marginRight: '4px' }}>
                         {Number(artigo.preco).toFixed(2)}€
                       </span>
                       <button 
                         onClick={() => { setEditandoPrecoId(artigo.id); setPrecoEditado(artigo.preco.toString()); }} 
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem' }} 
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '4px' }} 
                         title="Editar Preço"
                       >
                         ✏️
+                      </button>
+                      {/* NOVO: Botão Apagar Artigo */}
+                      <button 
+                        onClick={() => pedirConfirmacaoApagar(artigo.id, 'artigo')} 
+                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.2rem', padding: '4px' }}
+                        title="Apagar Artigo"
+                      >
+                        🗑️
                       </button>
                     </div>
                   )}
@@ -369,7 +385,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 7. RELATÓRIO */}
+        {/* 7. RELATÓRIO COM ELIMINAÇÃO */}
         {ecraAtual === 'relatorio' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Histórico Total</h2>
@@ -398,13 +414,12 @@ export default function App() {
                       </small>
                     </div>
                     
-                    {/* Bloco da direita: Valor e Botão Apagar que chama o NOVO Modal */}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
                       <span style={{ fontWeight: 'bold', fontSize: '1.1rem', color: 'var(--text-primary)' }}>
                         {Number(saida.total_faturado).toFixed(2)}€
                       </span>
                       <button 
-                        onClick={() => pedirConfirmacaoApagar(saida.id)} 
+                        onClick={() => pedirConfirmacaoApagar(saida.id, 'saida')} 
                         style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.2rem', padding: '4px' }}
                         title="Apagar Registo"
                       >
