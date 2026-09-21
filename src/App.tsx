@@ -3,104 +3,263 @@ import { Scanner } from '@yudiel/react-qr-scanner';
 import { supabase } from './supabase';
 import './index.css';
 
+// --- TIPOS DE DADOS ---
 type Artigo = { id: number; codigo: string; nome: string; preco: number; };
-type Saida = { id: number; artigo_codigo: string; artigo_nome: string; quantidade: number; total_faturado: number; data: string; };
-type Ecra = 'catalogo' | 'scanner' | 'relatorio';
+type Saida = { id: number; artigo_codigo: string; artigo_nome: string; quantidade: number; total_faturado: number; data: string; op_numero: string; tamanho: string; };
+type Ecra = 'home' | 'catalogo' | 'novo_produto' | 'escolher_saida' | 'scanner' | 'formulario_saida' | 'relatorio';
 
 export default function App() {
-  const [ecraAtual, setEcraAtual] = useState<Ecra>('catalogo');
+  const [ecraAtual, setEcraAtual] = useState<Ecra>('home');
   const [artigos, setArtigos] = useState<Artigo[]>([]);
   const [saidas, setSaidas] = useState<Saida[]>([]);
-  const [pausarCamara, setPausarCamara] = useState<boolean>(false);
   const [aCarregar, setACarregar] = useState<boolean>(true);
+  
+  // Estados para o Formulário de Saída
+  const [modoSaida, setModoSaida] = useState<'scanner' | 'manual' | null>(null);
+  const [artigoSelecionado, setArtigoSelecionado] = useState<Artigo | null>(null);
+  const [pausarCamara, setPausarCamara] = useState<boolean>(false);
 
-  // 1. Vai buscar os dados reais ao Supabase quando a app abre
+  // Estados dos inputs
+  const [formOP, setFormOP] = useState('');
+  const [formTamanho, setFormTamanho] = useState('');
+  const [formQtd, setFormQtd] = useState('');
+  
+  const [novoCod, setNovoCod] = useState('');
+  const [novoNome, setNovoNome] = useState('');
+  const [novoPreco, setNovoPreco] = useState('');
+
   useEffect(() => {
     carregarDados();
   }, []);
 
   async function carregarDados() {
     setACarregar(true);
-    
-    const { data: dadosArtigos } = await supabase.from('artigos').select('*');
+    const { data: dadosArtigos } = await supabase.from('artigos').select('*').order('nome');
     if (dadosArtigos) setArtigos(dadosArtigos);
 
     const { data: dadosSaidas } = await supabase.from('saidas').select('*').order('data', { ascending: false });
     if (dadosSaidas) setSaidas(dadosSaidas);
-    
     setACarregar(false);
   }
 
-  // 2. Registar a saída real na base de dados
-  const lidarComLeitura = async (codigosLidos: any[]) => {
+  // --- LÓGICA DE REGISTO ---
+  const registarNovoProduto = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const precoNum = parseFloat(novoPreco.replace(',', '.'));
+    if (!novoCod || !novoNome || isNaN(precoNum)) return alert('Preencha todos os campos corretamente.');
+
+    const { error } = await supabase.from('artigos').insert({ codigo: novoCod, nome: novoNome, preco: precoNum });
+    if (error) {
+      alert(`Erro: ${error.message}`);
+    } else {
+      alert('Produto registado com sucesso!');
+      setNovoCod(''); setNovoNome(''); setNovoPreco('');
+      carregarDados();
+      setEcraAtual('catalogo');
+    }
+  };
+
+  const processarLeituraScanner = (codigosLidos: any[]) => {
     if (codigosLidos.length === 0 || pausarCamara) return;
     const codigoQR = codigosLidos[0].rawValue;
     setPausarCamara(true);
 
-    const artigoEncontrado = artigos.find(a => a.codigo === codigoQR);
-    
-    if (artigoEncontrado) {
-      const quantidadeStr = window.prompt(`📦 ${artigoEncontrado.nome}\nQuantas peças vai entregar?`);
-      const quantidade = parseInt(quantidadeStr || '0');
-
-      if (quantidade > 0) {
-        const totalCalculado = quantidade * artigoEncontrado.preco;
-        
-        // Envia a informação para o Supabase
-        const { error } = await supabase.from('saidas').insert({
-          artigo_codigo: artigoEncontrado.codigo,
-          artigo_nome: artigoEncontrado.nome,
-          quantidade: quantidade,
-          total_faturado: totalCalculado
-        });
-
-        if (error) {
-          alert(`❌ Erro a guardar: ${error.message}`);
-        } else {
-          alert(`✅ Guardado na Nuvem: ${quantidade}x ${artigoEncontrado.nome}\nTotal: ${totalCalculado.toFixed(2)}€`);
-          carregarDados(); // Atualiza a lista imediatamente
-        }
-      }
+    const artigo = artigos.find(a => a.codigo === codigoQR);
+    if (artigo) {
+      setArtigoSelecionado(artigo);
+      setEcraAtual('formulario_saida');
     } else {
-      alert(`❌ Erro: O código "${codigoQR}" não existe no catálogo.`);
+      alert(`O código "${codigoQR}" não existe no catálogo.`);
+      setTimeout(() => setPausarCamara(false), 2000);
     }
-    
-    // Espera 2.5 segundos para não ler o mesmo código várias vezes
-    setTimeout(() => setPausarCamara(false), 2500);
   };
 
-  // Ecrã de carregamento enquanto vai buscar dados ao Supabase
-  if (aCarregar) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: 'var(--bg-color)', color: 'var(--primary-color)' }}>
-        A sincronizar com a nuvem...
-      </div>
-    );
-  }
+  const guardarSaida = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!artigoSelecionado) return alert('Selecione um artigo.');
+    
+    const qtdNum = parseInt(formQtd);
+    if (isNaN(qtdNum) || qtdNum <= 0) return alert('Quantidade inválida.');
+
+    const totalCalculado = qtdNum * artigoSelecionado.preco;
+
+    const { error } = await supabase.from('saidas').insert({
+      artigo_codigo: artigoSelecionado.codigo,
+      artigo_nome: artigoSelecionado.nome,
+      quantidade: qtdNum,
+      total_faturado: totalCalculado,
+      op_numero: formOP,
+      tamanho: formTamanho
+    });
+
+    if (error) {
+      alert(`Erro ao guardar: ${error.message}`);
+    } else {
+      alert(`✅ Guardado: ${qtdNum}x ${artigoSelecionado.nome}`);
+      setFormOP(''); setFormTamanho(''); setFormQtd('');
+      setArtigoSelecionado(null);
+      carregarDados();
+      setEcraAtual('home');
+    }
+  };
+
+  // --- INTERFACE (UI) ---
+  if (aCarregar) return <div className="loading">A sincronizar com a base de dados...</div>;
 
   return (
     <div style={{ maxWidth: '600px', margin: '0 auto', minHeight: '100vh', position: 'relative' }}>
-      
-      <header style={{ padding: '20px', backgroundColor: 'var(--surface-color)', borderBottom: '1px solid var(--border-color)', position: 'sticky', top: 0, zIndex: 10 }}>
-        <h1 style={{ fontSize: '1.2rem', margin: 0, textAlign: 'center', color: 'var(--primary-color)' }}>
-          ConfeçãoApp
-        </h1>
+      <header style={{ padding: '20px', backgroundColor: 'var(--surface-color)', borderBottom: '1px solid var(--border-color)', position: 'sticky', top: 0, zIndex: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h1 style={{ fontSize: '1.2rem', margin: 0, color: 'var(--primary-color)' }}>ConfeçãoApp</h1>
+        {ecraAtual !== 'home' && (
+          <button onClick={() => setEcraAtual('home')} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.9rem' }}>
+            ◀ Voltar
+          </button>
+        )}
       </header>
 
       <main style={{ padding: '20px', paddingBottom: '90px' }}>
         
-        {/* ECRÃ 1: CATÁLOGO */}
+        {/* 1. PÁGINA DE ROSTO (HOME) */}
+        {ecraAtual === 'home' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', animation: 'fadeIn 0.3s' }}>
+            <h2 style={{ fontSize: '1.5rem', marginBottom: '10px' }}>Painel Principal</h2>
+            
+            <button onClick={() => setEcraAtual('escolher_saida')} style={btnPrimary}>
+              📦 Registar Saída de Produto
+            </button>
+            <button onClick={() => setEcraAtual('novo_produto')} style={btnSecondary}>
+              ➕ Registar Novo Produto
+            </button>
+            
+            <div style={{ borderTop: '1px solid var(--border-color)', margin: '20px 0' }}></div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+              <button onClick={() => setEcraAtual('catalogo')} style={btnCard}>
+                <span style={{ fontSize: '2rem', display: 'block', marginBottom: '10px' }}>📋</span>
+                Ver Catálogo
+              </button>
+              <button onClick={() => setEcraAtual('relatorio')} style={btnCard}>
+                <span style={{ fontSize: '2rem', display: 'block', marginBottom: '10px' }}>📊</span>
+                Relatórios
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 2. REGISTAR NOVO PRODUTO */}
+        {ecraAtual === 'novo_produto' && (
+          <div style={{ animation: 'fadeIn 0.3s' }}>
+            <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Novo Produto</h2>
+            <form onSubmit={registarNovoProduto} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <div>
+                <label style={labelStyle}>Código do Artigo (ex: ART-011)</label>
+                <input type="text" value={novoCod} onChange={e => setNovoCod(e.target.value)} required style={inputStyle} />
+              </div>
+              <div>
+                <label style={labelStyle}>Nome do Artigo</label>
+                <input type="text" value={novoNome} onChange={e => setNovoNome(e.target.value)} required style={inputStyle} />
+              </div>
+              <div>
+                <label style={labelStyle}>Preço Unitário (€)</label>
+                <input type="number" step="0.01" value={novoPreco} onChange={e => setNovoPreco(e.target.value)} required style={inputStyle} />
+              </div>
+              <button type="submit" style={btnPrimary}>Guardar Produto</button>
+            </form>
+          </div>
+        )}
+
+        {/* 3. ESCOLHER TIPO DE SAÍDA */}
+        {ecraAtual === 'escolher_saida' && (
+          <div style={{ animation: 'fadeIn 0.3s' }}>
+            <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Método de Registo</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <button onClick={() => { setModoSaida('scanner'); setPausarCamara(false); setEcraAtual('scanner'); }} style={btnPrimary}>
+                📷 Usar Scanner (QR Code)
+              </button>
+              <button onClick={() => { setModoSaida('manual'); setArtigoSelecionado(null); setEcraAtual('formulario_saida'); }} style={btnSecondary}>
+                ✍️ Introdução Manual
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 4. SCANNER */}
+        {ecraAtual === 'scanner' && (
+          <div style={{ animation: 'fadeIn 0.3s', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <h2 style={{ fontSize: '1.5rem', marginBottom: '10px' }}>Ler Código</h2>
+            <div style={{ width: '100%', maxWidth: '350px', aspectRatio: '1', borderRadius: '24px', overflow: 'hidden', border: '2px solid var(--primary-color)', backgroundColor: 'black' }}>
+              {!pausarCamara ? (
+                <Scanner onScan={processarLeituraScanner} />
+              ) : (
+                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--surface-color)', color: 'var(--primary-color)' }}>
+                  A processar...
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* 5. FORMULÁRIO DE SAÍDA (Comum a Manual e Scanner) */}
+        {ecraAtual === 'formulario_saida' && (
+          <div style={{ animation: 'fadeIn 0.3s' }}>
+            <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Detalhes da Saída</h2>
+            <form onSubmit={guardarSaida} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              
+              {/* Seleção de Artigo: Bloqueado se for Scanner, Dropdown se for Manual */}
+              <div>
+                <label style={labelStyle}>Artigo</label>
+                {modoSaida === 'scanner' && artigoSelecionado ? (
+                  <div style={{ padding: '12px', backgroundColor: 'var(--surface-color)', borderRadius: '8px', border: '1px solid var(--primary-color)', color: 'white' }}>
+                    {artigoSelecionado.codigo} - {artigoSelecionado.nome}
+                  </div>
+                ) : (
+                  <select 
+                    value={artigoSelecionado?.id || ''} 
+                    onChange={e => setArtigoSelecionado(artigos.find(a => a.id === parseInt(e.target.value)) || null)}
+                    required
+                    style={inputStyle}
+                  >
+                    <option value="" disabled>Selecione um artigo na lista...</option>
+                    {artigos.map(a => (
+                      <option key={a.id} value={a.id}>{a.codigo} - {a.nome}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              <div>
+                <label style={labelStyle}>OP n.º (Ordem de Produção)</label>
+                <input type="text" value={formOP} onChange={e => setFormOP(e.target.value)} required placeholder="Ex: OP-2024-15" style={inputStyle} />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                <div>
+                  <label style={labelStyle}>Tamanho</label>
+                  <input type="text" value={formTamanho} onChange={e => setFormTamanho(e.target.value)} required placeholder="Ex: L, XL, 42..." style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Quantidade</label>
+                  <input type="number" min="1" value={formQtd} onChange={e => setFormQtd(e.target.value)} required style={inputStyle} />
+                </div>
+              </div>
+
+              <button type="submit" style={{ ...btnPrimary, marginTop: '10px' }}>Confirmar e Guardar Saída</button>
+            </form>
+          </div>
+        )}
+
+        {/* 6. CATÁLOGO */}
         {ecraAtual === 'catalogo' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Catálogo ({artigos.length})</h2>
-            <div style={{ display: 'grid', gap: '15px' }}>
+            <div style={{ display: 'grid', gap: '10px' }}>
               {artigos.map(artigo => (
-                <div key={artigo.id} style={{ backgroundColor: 'var(--surface-color)', padding: '20px', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid var(--border-color)' }}>
+                <div key={artigo.id} style={{ backgroundColor: 'var(--surface-color)', padding: '15px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
-                    <strong style={{ fontSize: '1.1rem', display: 'block', marginBottom: '5px' }}>{artigo.nome}</strong>
-                    <small style={{ color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{artigo.codigo}</small>
+                    <strong style={{ display: 'block', fontSize: '1.1rem' }}>{artigo.nome}</strong>
+                    <small style={{ color: 'var(--text-secondary)' }}>{artigo.codigo}</small>
                   </div>
-                  <div style={{ backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--primary-color)', padding: '8px 12px', borderRadius: '8px', fontWeight: 'bold' }}>
+                  <div style={{ color: 'var(--primary-color)', fontWeight: 'bold' }}>
                     {Number(artigo.preco).toFixed(2)}€
                   </div>
                 </div>
@@ -109,55 +268,36 @@ export default function App() {
           </div>
         )}
 
-        {/* ECRÃ 2: SCANNER */}
-        {ecraAtual === 'scanner' && (
-          <div style={{ animation: 'fadeIn 0.3s', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <h2 style={{ fontSize: '1.5rem', marginBottom: '10px' }}>Nova Saída</h2>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: '30px', textAlign: 'center' }}>Aponte a câmara para o código QR.</p>
-            
-            <div style={{ width: '100%', maxWidth: '350px', aspectRatio: '1', borderRadius: '24px', overflow: 'hidden', border: '2px solid var(--primary-color)', boxShadow: '0 0 20px rgba(59, 130, 246, 0.2)', backgroundColor: 'black' }}>
-              {!pausarCamara ? (
-                <Scanner onScan={lidarComLeitura} />
-              ) : (
-                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--surface-color)' }}>
-                  <span style={{ color: 'var(--primary-color)', fontWeight: 'bold' }}>A processar...</span>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ECRÃ 3: RELATÓRIO */}
+        {/* 7. RELATÓRIO */}
         {ecraAtual === 'relatorio' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Histórico Total</h2>
             
-            <div style={{ background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', padding: '20px', borderRadius: '16px', marginBottom: '25px', boxShadow: '0 10px 15px -3px rgba(59, 130, 246, 0.3)' }}>
+            <div style={{ background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', padding: '20px', borderRadius: '16px', marginBottom: '25px' }}>
               <p style={{ color: 'rgba(255,255,255,0.8)', margin: '0 0 5px 0', fontSize: '0.9rem' }}>Faturação Global</p>
               <h3 style={{ margin: 0, fontSize: '2.5rem', color: 'white' }}>
                 {saidas.reduce((soma, saida) => soma + Number(saida.total_faturado), 0).toFixed(2)}€
               </h3>
             </div>
 
-            <h3 style={{ fontSize: '1.1rem', color: 'var(--text-secondary)', marginBottom: '15px' }}>Últimos Registos</h3>
             {saidas.length === 0 ? (
-              <p style={{ color: 'var(--text-secondary)', textAlign: 'center', marginTop: '40px' }}>Nenhum movimento registado.</p>
+              <p style={{ color: 'var(--text-secondary)', textAlign: 'center' }}>Nenhum movimento registado.</p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {saidas.map(saida => (
-                  <div key={saida.id} style={{ backgroundColor: 'var(--surface-color)', padding: '15px', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                      <div style={{ backgroundColor: '#2a2a2a', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: '#fff' }}>
-                        {saida.quantidade}x
+                  <div key={saida.id} style={{ backgroundColor: 'var(--surface-color)', padding: '15px', borderRadius: '12px', display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px' }}>
+                    <div>
+                      <strong style={{ display: 'block', marginBottom: '4px' }}>{saida.quantidade}x {saida.artigo_nome}</strong>
+                      <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                        <span>OP: {saida.op_numero}</span> • <span>Tam: {saida.tamanho}</span>
                       </div>
-                      <div>
-                        <strong style={{ display: 'block' }}>{saida.artigo_nome}</strong>
-                        <small style={{ color: 'var(--text-secondary)' }}>
-                          {new Date(saida.data).toLocaleDateString('pt-PT')}
-                        </small>
-                      </div>
+                      <small style={{ color: 'var(--text-secondary)', display: 'block', marginTop: '4px' }}>
+                        {new Date(saida.data).toLocaleDateString('pt-PT')}
+                      </small>
                     </div>
-                    <div style={{ fontWeight: 'bold' }}>{Number(saida.total_faturado).toFixed(2)}€</div>
+                    <div style={{ fontWeight: 'bold', fontSize: '1.1rem', display: 'flex', alignItems: 'center' }}>
+                      {Number(saida.total_faturado).toFixed(2)}€
+                    </div>
                   </div>
                 ))}
               </div>
@@ -166,33 +306,31 @@ export default function App() {
         )}
       </main>
 
-      {/* BARRA DE NAVEGAÇÃO INFERIOR */}
-      <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, backgroundColor: 'var(--surface-color)', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-around', padding: '15px 10px', paddingBottom: 'calc(15px + env(safe-area-inset-bottom))', zIndex: 100 }}>
-        <button onClick={() => setEcraAtual('catalogo')} style={navButtonStyle(ecraAtual === 'catalogo')}>
-          <span style={{ fontSize: '1.5rem', marginBottom: '4px' }}>📦</span><span>Catálogo</span>
-        </button>
-        <button onClick={() => setEcraAtual('scanner')} style={navButtonStyle(ecraAtual === 'scanner')}>
-          <span style={{ fontSize: '1.5rem', marginBottom: '4px' }}>📷</span><span>Scanner</span>
-        </button>
-        <button onClick={() => setEcraAtual('relatorio')} style={navButtonStyle(ecraAtual === 'relatorio')}>
-          <span style={{ fontSize: '1.5rem', marginBottom: '4px' }}>📊</span><span>Resumo</span>
-        </button>
-      </nav>
-      
       <style>{`
+        .loading { display: flex; justify-content: center; align-items: center; height: 100vh; background: var(--bg-color); color: var(--primary-color); }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
     </div>
   );
 }
 
-function navButtonStyle(ativo: boolean): React.CSSProperties {
-  return {
-    backgroundColor: 'transparent',
-    border: 'none',
-    color: ativo ? 'var(--primary-color)' : 'var(--text-secondary)',
-    display: 'flex', flexDirection: 'column', alignItems: 'center',
-    fontSize: '0.75rem', cursor: 'pointer', fontWeight: ativo ? 'bold' : 'normal',
-    transition: 'color 0.2s', width: '33%'
-  };
-}
+// --- ESTILOS REUTILIZÁVEIS ---
+const btnPrimary: React.CSSProperties = {
+  width: '100%', padding: '15px', backgroundColor: 'var(--primary-color)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer'
+};
+
+const btnSecondary: React.CSSProperties = {
+  width: '100%', padding: '15px', backgroundColor: 'transparent', color: 'var(--primary-color)', border: '2px solid var(--primary-color)', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer'
+};
+
+const btnCard: React.CSSProperties = {
+  backgroundColor: 'var(--surface-color)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', padding: '20px', borderRadius: '12px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer', textAlign: 'center'
+};
+
+const inputStyle: React.CSSProperties = {
+  width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-color)', color: 'var(--text-primary)', fontSize: '1rem'
+};
+
+const labelStyle: React.CSSProperties = {
+  display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: 'bold'
+};
