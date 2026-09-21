@@ -37,7 +37,8 @@ export default function App() {
   const [editandoPrecoId, setEditandoPrecoId] = useState<number | null>(null);
   const [precoEditado, setPrecoEditado] = useState<string>('');
 
-  const [modalConfirmacao, setModalConfirmacao] = useState<{ aberto: boolean; tipo: 'saida' | 'artigo' | 'logout' | 'cancelar_lote' | null; idParaApagar: number | null }>({ aberto: false, tipo: null, idParaApagar: null });
+  // MODAL ATUALIZADO (agora aceita "idParaApagar" como string para podermos passar o LOTE_ID)
+  const [modalConfirmacao, setModalConfirmacao] = useState<{ aberto: boolean; tipo: 'saida' | 'artigo' | 'logout' | 'cancelar_lote' | 'lote_inteiro' | null; idParaApagar: number | string | null }>({ aberto: false, tipo: null, idParaApagar: null });
   const [alerta, setAlerta] = useState<{ visivel: boolean; titulo: string; mensagem: string; tipo: 'sucesso' | 'erro' | 'aviso' }>({ visivel: false, titulo: '', mensagem: '', tipo: 'sucesso' });
 
   const mostrarAlerta = (titulo: string, mensagem: string, tipo: 'sucesso' | 'erro' | 'aviso' = 'aviso') => {
@@ -123,22 +124,18 @@ export default function App() {
     const novaLista = [...listaExpedicao]; novaLista.splice(index, 1); setListaExpedicao(novaLista);
   };
 
-  // --- LÓGICA DE GERAÇÃO DO NÚMERO DE LOTE SEQUENCIAL ---
   const finalizarExpedicao = async () => {
     if (listaExpedicao.length === 0) return;
 
-    // 1. Criar a base do nome: "Expedição DDMMAAAA-"
     const hoje = new Date();
     const dia = hoje.getDate().toString().padStart(2, '0');
     const mes = (hoje.getMonth() + 1).toString().padStart(2, '0');
     const ano = hoje.getFullYear();
     const prefixo = `Expedição ${dia}${mes}${ano}-`;
 
-    // 2. Procurar na base de dados (saidas carregadas) quantos lotes de hoje já existem
     const lotesDeHoje = saidas.map(s => s.lote_id).filter(id => id && id.startsWith(prefixo)) as string[];
     const lotesUnicos = Array.from(new Set(lotesDeHoje));
     
-    // 3. Encontrar o número mais alto de hoje
     let maxNum = 0;
     lotesUnicos.forEach(lote => {
       const partes = lote.split('-');
@@ -146,7 +143,6 @@ export default function App() {
       if (!isNaN(num) && num > maxNum) maxNum = num;
     });
 
-    // 4. Gerar o novo ID (ex: Expedição 21092026-1)
     const novoLoteId = `${prefixo}${maxNum + 1}`;
     
     const dadosParaInserir = listaExpedicao.map(item => ({ ...item, lote_id: novoLoteId }));
@@ -160,18 +156,27 @@ export default function App() {
     }
   };
 
+  // --- MÉTODOS DOS MODAIS ---
   const pedirConfirmacaoApagar = (id: number, tipo: 'saida' | 'artigo') => { setModalConfirmacao({ aberto: true, tipo, idParaApagar: id }); };
+  const pedirConfirmacaoApagarLoteInteiro = (lote_id: string) => { setModalConfirmacao({ aberto: true, tipo: 'lote_inteiro', idParaApagar: lote_id }); };
+  
   const pedirConfirmacaoCancelarLote = () => {
     if (listaExpedicao.length > 0) setModalConfirmacao({ aberto: true, tipo: 'cancelar_lote', idParaApagar: null });
     else setEcraAtual('home');
   };
+  
   const cancelarModal = () => setModalConfirmacao({ aberto: false, tipo: null, idParaApagar: null });
 
   const executarAcaoModal = async () => {
     const { idParaApagar, tipo } = modalConfirmacao;
     if (!tipo) return;
-    if (tipo === 'logout') { setAutenticado(false); localStorage.removeItem('autenticadoConfecao'); setEcraAtual('home'); }
-    else if (tipo === 'cancelar_lote') { setListaExpedicao([]); setEcraAtual('home'); }
+    
+    if (tipo === 'logout') { 
+      setAutenticado(false); localStorage.removeItem('autenticadoConfecao'); setEcraAtual('home'); 
+    }
+    else if (tipo === 'cancelar_lote') { 
+      setListaExpedicao([]); setEcraAtual('home'); 
+    }
     else if (tipo === 'saida' && idParaApagar) {
       const { error } = await supabase.from('saidas').delete().eq('id', idParaApagar);
       if (!error) setSaidas(saidas.filter(s => s.id !== idParaApagar)); else mostrarAlerta('Erro', error.message, 'erro');
@@ -179,6 +184,16 @@ export default function App() {
     else if (tipo === 'artigo' && idParaApagar) {
       const { error } = await supabase.from('artigos').delete().eq('id', idParaApagar);
       if (!error) setArtigos(artigos.filter(a => a.id !== idParaApagar)); else mostrarAlerta('Erro', error.message, 'erro');
+    }
+    // NOVO: Lógica para apagar um lote de expedição inteiro
+    else if (tipo === 'lote_inteiro' && idParaApagar) {
+      const { error } = await supabase.from('saidas').delete().eq('lote_id', idParaApagar as string);
+      if (!error) {
+        setSaidas(saidas.filter(s => s.lote_id !== idParaApagar));
+        mostrarAlerta('Sucesso', 'A expedição foi totalmente eliminada.', 'sucesso');
+      } else {
+        mostrarAlerta('Erro', error.message, 'erro');
+      }
     }
     setModalConfirmacao({ aberto: false, tipo: null, idParaApagar: null });
   };
@@ -193,70 +208,36 @@ export default function App() {
     return Object.values(grupos).sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
   };
 
-  // --- NOVA FUNÇÃO: GERAR PDF DA GUIA ---
+  // --- GERAÇÃO DE PDF ---
   const gerarPDF = (grupo: any, comPrecos: boolean) => {
     const doc = new jsPDF();
-    
-    // Cabeçalho do Documento
-    doc.setFontSize(18);
-    doc.setTextColor(37, 99, 235); // Cor primária (Azul)
-    doc.text(`Nota de Expedicao: ${grupo.lote_id}`, 14, 20);
-    
-    doc.setFontSize(11);
-    doc.setTextColor(100);
-    doc.text(`Data e Hora: ${new Date(grupo.data).toLocaleString('pt-PT')}`, 14, 28);
+    doc.setFontSize(18); doc.setTextColor(37, 99, 235); doc.text(`Nota de Expedicao: ${grupo.lote_id}`, 14, 20);
+    doc.setFontSize(11); doc.setTextColor(100); doc.text(`Data e Hora: ${new Date(grupo.data).toLocaleString('pt-PT')}`, 14, 28);
     
     if (comPrecos) {
-      doc.setTextColor(220, 38, 38); // Vermelho para destacar documento interno
-      doc.text('DOCUMENTO INTERNO - COM VALORES', 14, 34);
+      doc.setTextColor(220, 38, 38); doc.text('DOCUMENTO INTERNO - COM VALORES', 14, 34);
     } else {
-      doc.setTextColor(0);
-      doc.text('DOCUMENTO DE ACOMPANHAMENTO DE MERCADORIA', 14, 34);
+      doc.setTextColor(0); doc.text('DOCUMENTO DE ACOMPANHAMENTO DE MERCADORIA', 14, 34);
     }
 
-    // Configuração das Colunas da Tabela
-    const colunas = comPrecos 
-      ? ['Referencia / Artigo', 'Ordem Prod. (OP)', 'Tamanho', 'Qtd', 'Total EUR'] 
-      : ['Referencia / Artigo', 'Ordem Prod. (OP)', 'Tamanho', 'Qtd'];
-      
-    // Mapeamento das Linhas
+    const colunas = comPrecos ? ['Referencia / Artigo', 'Ordem Prod. (OP)', 'Tamanho', 'Qtd', 'Total EUR'] : ['Referencia / Artigo', 'Ordem Prod. (OP)', 'Tamanho', 'Qtd'];
     const linhas = grupo.itens.map((item: Saida) => {
-      if (comPrecos) {
-        return [`${item.artigo_codigo} - ${item.artigo_nome}`, item.op_numero, item.tamanho, item.quantidade.toString(), `${Number(item.total_faturado).toFixed(2)}`];
-      }
+      if (comPrecos) return [`${item.artigo_codigo} - ${item.artigo_nome}`, item.op_numero, item.tamanho, item.quantidade.toString(), `${Number(item.total_faturado).toFixed(2)}`];
       return [`${item.artigo_codigo} - ${item.artigo_nome}`, item.op_numero, item.tamanho, item.quantidade.toString()];
     });
 
-    // Geração da Tabela
-    autoTable(doc, {
-      startY: 40,
-      head: [colunas],
-      body: linhas,
-      theme: 'grid',
-      headStyles: { fillColor: [37, 99, 235] },
-      styles: { fontSize: 10, cellPadding: 4 }
-    });
+    autoTable(doc, { startY: 40, head: [colunas], body: linhas, theme: 'grid', headStyles: { fillColor: [37, 99, 235] }, styles: { fontSize: 10, cellPadding: 4 } });
 
-    // Totais no final da folha
     const totalQtd = grupo.itens.reduce((acc: number, item: Saida) => acc + item.quantidade, 0);
     const finalY = (doc as any).lastAutoTable.finalY + 15;
     
-    doc.setFontSize(12);
-    doc.setTextColor(0);
-    doc.text(`Total de Pecas Expedidas: ${totalQtd} un.`, 14, finalY);
-    
-    if (comPrecos) {
-      doc.setFontSize(14);
-      doc.setTextColor(37, 99, 235);
-      doc.text(`Faturacao Total do Lote: ${grupo.total_faturado.toFixed(2)} EUR`, 14, finalY + 10);
-    }
+    doc.setFontSize(12); doc.setTextColor(0); doc.text(`Total de Pecas Expedidas: ${totalQtd} un.`, 14, finalY);
+    if (comPrecos) { doc.setFontSize(14); doc.setTextColor(37, 99, 235); doc.text(`Faturacao Total do Lote: ${grupo.total_faturado.toFixed(2)} EUR`, 14, finalY + 10); }
 
-    // Guardar ficheiro com nome inteligente
-    const nomeFicheiro = `${grupo.lote_id}${comPrecos ? '_INTERNO' : '_CLIENTE'}.pdf`;
-    doc.save(nomeFicheiro);
+    doc.save(`${grupo.lote_id}${comPrecos ? '_INTERNO' : '_CLIENTE'}.pdf`);
   };
 
-
+  // --- ECRÃ DE LOGIN ---
   if (!autenticado) {
     return (
       <div style={{ maxWidth: '600px', margin: '0 auto', minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '20px', backgroundColor: 'var(--bg-color)', animation: 'fadeIn 0.5s' }}>
@@ -457,10 +438,23 @@ export default function App() {
                         </strong>
                         <small style={{ color: 'var(--text-secondary)' }}>{new Date(grupo.data).toLocaleString('pt-PT')}</small>
                       </div>
-                      <div style={{ fontWeight: 'bold', fontSize: '1.2rem' }}>{grupo.total_faturado.toFixed(2)}€</div>
+                      
+                      {/* BOTÃO DE APAGAR O LOTE INTEIRO AQUI */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                        <div style={{ fontWeight: 'bold', fontSize: '1.2rem' }}>{grupo.total_faturado.toFixed(2)}€</div>
+                        {grupo.lote_id.startsWith('Expedição') && (
+                          <button 
+                            onClick={() => pedirConfirmacaoApagarLoteInteiro(grupo.lote_id)} 
+                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.4rem', padding: '4px' }}
+                            title="Apagar Expedição Completa"
+                          >
+                            🗑️
+                          </button>
+                        )}
+                      </div>
+
                     </div>
                     
-                    {/* BOTÕES DE GERAR PDF APARECEM APENAS NOS NOVOS LOTES */}
                     {grupo.lote_id.startsWith('Expedição') && (
                       <div style={{ display: 'flex', gap: '10px', padding: '15px 15px 0 15px' }}>
                         <button onClick={() => gerarPDF(grupo, false)} style={{...btnSecondary, padding: '10px', fontSize: '0.85rem', flex: 1}}>📄 Guia Cliente (Sem Preços)</button>
@@ -502,19 +496,28 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL DE CONFIRMAÇÃO */}
+      {/* MODAL DE CONFIRMAÇÃO (Agora suporta 'lote_inteiro') */}
       {modalConfirmacao.aberto && (
         <div style={modalOverlayStyle}>
           <div style={modalBoxStyle}>
-            <div style={{ fontSize: '2.5rem', marginBottom: '10px' }}>{modalConfirmacao.tipo === 'logout' ? '🚪' : modalConfirmacao.tipo === 'cancelar_lote' ? '🛑' : '⚠️'}</div>
+            <div style={{ fontSize: '2.5rem', marginBottom: '10px' }}>
+              {modalConfirmacao.tipo === 'logout' ? '🚪' : modalConfirmacao.tipo === 'cancelar_lote' ? '🛑' : '⚠️'}
+            </div>
+            
             <h3 style={{ margin: '0 0 10px 0', fontSize: '1.2rem', color: 'var(--text-primary)' }}>
-              {modalConfirmacao.tipo === 'logout' ? 'Terminar Sessão' : modalConfirmacao.tipo === 'cancelar_lote' ? 'Cancelar Expedição' : 'Confirmar Eliminação'}
+              {modalConfirmacao.tipo === 'logout' ? 'Terminar Sessão' : 
+               modalConfirmacao.tipo === 'cancelar_lote' ? 'Cancelar Expedição' : 
+               modalConfirmacao.tipo === 'lote_inteiro' ? 'Eliminar Lote Inteiro' : 
+               'Confirmar Eliminação'}
             </h3>
+            
             <p style={{ color: 'var(--text-secondary)', marginBottom: '25px', fontSize: '0.95rem', lineHeight: '1.4' }}>
               {modalConfirmacao.tipo === 'logout' ? 'Tem a certeza que deseja sair da sua conta?' : 
                modalConfirmacao.tipo === 'cancelar_lote' ? 'Vai perder as peças que já adicionou a este lote. Deseja cancelar?' : 
+               modalConfirmacao.tipo === 'lote_inteiro' ? 'Tem a certeza que deseja apagar a expedição COMPLETA? Todas as peças deste lote vão ser apagadas.' :
                <>Tem a certeza que deseja apagar este registo?<br/>Esta ação não pode ser desfeita.</>}
             </p>
+            
             <div style={{ display: 'flex', gap: '10px' }}>
               <button onClick={cancelarModal} style={{ ...btnSecondary, padding: '12px', flex: 1 }}>Voltar</button>
               <button onClick={executarAcaoModal} style={{ ...btnPrimary, backgroundColor: modalConfirmacao.tipo === 'logout' ? 'var(--primary-color)' : '#ef4444', padding: '12px', flex: 1 }}>
