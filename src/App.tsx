@@ -27,7 +27,7 @@ export default function App() {
   const [saidas, setSaidas] = useState<Saida[]>([]);
   const [aCarregar, setACarregar] = useState<boolean>(true);
   
-  // --- ESTADOS DO LOTE DE EXPEDIÇÃO (NOVO) ---
+  // --- ESTADOS DO LOTE DE EXPEDIÇÃO ---
   const [listaExpedicao, setListaExpedicao] = useState<ItemExpedicao[]>([]);
   
   // --- ESTADOS PARA O FORMULÁRIO DE SAÍDA ---
@@ -45,8 +45,15 @@ export default function App() {
   const [editandoPrecoId, setEditandoPrecoId] = useState<number | null>(null);
   const [precoEditado, setPrecoEditado] = useState<string>('');
 
-  // --- MODAL DE CONFIRMAÇÃO UNIFICADO ---
+  // --- MODAIS DA APLICAÇÃO (Confirmação e Alertas) ---
   const [modalConfirmacao, setModalConfirmacao] = useState<{ aberto: boolean; tipo: 'saida' | 'artigo' | 'logout' | 'cancelar_lote' | null; idParaApagar: number | null }>({ aberto: false, tipo: null, idParaApagar: null });
+  const [alerta, setAlerta] = useState<{ visivel: boolean; titulo: string; mensagem: string; tipo: 'sucesso' | 'erro' | 'aviso' }>({ visivel: false, titulo: '', mensagem: '', tipo: 'sucesso' });
+
+  // Função centralizada para mostrar avisos na plataforma
+  const mostrarAlerta = (titulo: string, mensagem: string, tipo: 'sucesso' | 'erro' | 'aviso' = 'aviso') => {
+    setAlerta({ visivel: true, titulo, mensagem, tipo });
+  };
+  const fecharAlerta = () => setAlerta({ ...alerta, visivel: false });
 
   useEffect(() => {
     if (autenticado) carregarDados();
@@ -55,10 +62,16 @@ export default function App() {
   async function carregarDados() {
     setACarregar(true);
     const { data: dadosArtigos, error: erroArtigos } = await supabase.from('artigos').select('*').order('codigo');
-    if (erroArtigos) console.error(erroArtigos); else if (dadosArtigos) setArtigos(dadosArtigos);
+    if (erroArtigos) {
+      mostrarAlerta('Erro de Ligação', erroArtigos.message, 'erro');
+      console.error(erroArtigos);
+    } else if (dadosArtigos) setArtigos(dadosArtigos);
 
     const { data: dadosSaidas, error: erroSaidas } = await supabase.from('saidas').select('*').order('data', { ascending: false });
-    if (erroSaidas) console.error(erroSaidas); else if (dadosSaidas) setSaidas(dadosSaidas);
+    if (erroSaidas) {
+      mostrarAlerta('Erro de Ligação', erroSaidas.message, 'erro');
+      console.error(erroSaidas);
+    } else if (dadosSaidas) setSaidas(dadosSaidas);
     
     setACarregar(false);
   }
@@ -70,7 +83,9 @@ export default function App() {
       setAutenticado(true);
       localStorage.setItem('autenticadoConfecao', 'true');
       setLoginUser(''); setLoginPass('');
-    } else alert('Credenciais incorretas. Tente novamente.');
+    } else {
+      mostrarAlerta('Acesso Negado', 'Credenciais incorretas. Tente novamente.', 'erro');
+    }
   };
 
   const handleLogout = () => {
@@ -81,23 +96,36 @@ export default function App() {
   const registarNovoProduto = async (e: React.FormEvent) => {
     e.preventDefault();
     const precoNum = parseFloat(novoPreco.replace(',', '.'));
-    if (!novoCod || !novoNome || isNaN(precoNum)) return alert('Preencha todos os campos corretamente.');
+    if (!novoCod || !novoNome || isNaN(precoNum)) {
+      return mostrarAlerta('Atenção', 'Preencha todos os campos corretamente.', 'aviso');
+    }
 
     const { error } = await supabase.from('artigos').insert({ codigo: novoCod, nome: novoNome, preco: precoNum });
-    if (error) alert(`Erro: ${error.message}`);
-    else { alert('Produto registado com sucesso!'); setNovoCod(''); setNovoNome(''); setNovoPreco(''); carregarDados(); setEcraAtual('catalogo'); }
+    if (error) {
+      mostrarAlerta('Erro ao Guardar', error.message, 'erro');
+    } else { 
+      mostrarAlerta('Sucesso', 'O artigo foi registado com sucesso no catálogo!', 'sucesso');
+      setNovoCod(''); setNovoNome(''); setNovoPreco(''); 
+      carregarDados(); 
+      setEcraAtual('catalogo'); 
+    }
   };
 
   const guardarNovoPreco = async (id: number) => {
     const precoNum = parseFloat(precoEditado.replace(',', '.'));
-    if (isNaN(precoNum) || precoNum < 0) return alert('Preço inválido.');
+    if (isNaN(precoNum) || precoNum < 0) return mostrarAlerta('Atenção', 'O preço introduzido é inválido.', 'aviso');
     const { error } = await supabase.from('artigos').update({ preco: precoNum }).eq('id', id);
-    if (error) alert(`Erro: ${error.message}`); else { setEditandoPrecoId(null); carregarDados(); }
+    if (error) {
+      mostrarAlerta('Erro ao Atualizar', error.message, 'erro');
+    } else { 
+      setEditandoPrecoId(null); 
+      carregarDados(); 
+    }
   };
 
   // --- LÓGICA DO NOVO LOTE DE EXPEDIÇÃO ---
   const iniciarNovaExpedicao = () => {
-    setListaExpedicao([]); // Limpa a lista
+    setListaExpedicao([]);
     setEcraAtual('resumo_expedicao');
   };
 
@@ -111,18 +139,17 @@ export default function App() {
       setArtigoSelecionado(artigo);
       setEcraAtual('formulario_saida');
     } else {
-      alert(`O código "${codigoQR}" não existe no catálogo.`);
+      mostrarAlerta('Artigo não encontrado', `O código "${codigoQR}" não existe no catálogo.`, 'aviso');
       setTimeout(() => setPausarCamara(false), 2000);
     }
   };
 
-  // NOVO: Adiciona a peça à lista temporária em vez de ir logo à base de dados
   const adicionarAoLote = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!artigoSelecionado) return alert('Selecione um artigo.');
+    if (!artigoSelecionado) return mostrarAlerta('Atenção', 'Selecione um artigo da lista.', 'aviso');
     
     const qtdNum = parseInt(formQtd);
-    if (isNaN(qtdNum) || qtdNum <= 0) return alert('Quantidade inválida.');
+    if (isNaN(qtdNum) || qtdNum <= 0) return mostrarAlerta('Atenção', 'A quantidade inserida é inválida.', 'aviso');
 
     const novoItem: ItemExpedicao = {
       artigo_codigo: artigoSelecionado.codigo,
@@ -134,9 +161,6 @@ export default function App() {
     };
 
     setListaExpedicao([...listaExpedicao, novoItem]);
-    
-    // Limpamos apenas a quantidade e o artigo. 
-    // Deixamos a formOP e formTamanho na memória para a próxima peça!
     setFormQtd('');
     setArtigoSelecionado(null);
     setEcraAtual('resumo_expedicao');
@@ -148,33 +172,30 @@ export default function App() {
     setListaExpedicao(novaLista);
   };
 
-  // NOVO: Envia todo o lote para o Supabase
   const finalizarExpedicao = async () => {
     if (listaExpedicao.length === 0) return;
 
-    // Gera um ID único para este lote
     const loteId = `LOTE-${Date.now()}`;
-    
     const dadosParaInserir = listaExpedicao.map(item => ({
       ...item,
-      lote_id: loteId // A nossa nova coluna
+      lote_id: loteId
     }));
 
     const { error } = await supabase.from('saidas').insert(dadosParaInserir);
 
     if (error) {
-      alert(`Erro ao guardar lote: ${error.message}`);
+      mostrarAlerta('Erro na Base de Dados', error.message, 'erro');
     } else {
-      alert(`✅ Lote de Expedição Guardado com Sucesso!`);
+      mostrarAlerta('Expedição Concluída', 'O lote foi registado e faturado com sucesso!', 'sucesso');
       setListaExpedicao([]);
-      setFormOP(''); // Limpa a OP apenas no final do lote inteiro
+      setFormOP(''); 
       setFormTamanho('');
       carregarDados();
       setEcraAtual('home');
     }
   };
 
-  // --- LÓGICA DO MODAL UNIFICADO ---
+  // --- LÓGICA DO MODAL DE CONFIRMAÇÃO ---
   const pedirConfirmacaoApagar = (id: number, tipo: 'saida' | 'artigo') => {
     setModalConfirmacao({ aberto: true, tipo, idParaApagar: id });
   };
@@ -201,34 +222,25 @@ export default function App() {
       setListaExpedicao([]); setEcraAtual('home');
     } else if (tipo === 'saida' && idParaApagar) {
       const { error } = await supabase.from('saidas').delete().eq('id', idParaApagar);
-      if (!error) setSaidas(saidas.filter(s => s.id !== idParaApagar)); else alert(error.message);
+      if (!error) setSaidas(saidas.filter(s => s.id !== idParaApagar)); else mostrarAlerta('Erro', error.message, 'erro');
     } else if (tipo === 'artigo' && idParaApagar) {
       const { error } = await supabase.from('artigos').delete().eq('id', idParaApagar);
-      if (!error) setArtigos(artigos.filter(a => a.id !== idParaApagar)); else alert(error.message);
+      if (!error) setArtigos(artigos.filter(a => a.id !== idParaApagar)); else mostrarAlerta('Erro', error.message, 'erro');
     }
     setModalConfirmacao({ aberto: false, tipo: null, idParaApagar: null });
   };
 
-  // --- PREPARAÇÃO DE DADOS PARA O RELATÓRIO (AGRUPAMENTO) ---
+  // --- PREPARAÇÃO DE DADOS PARA O RELATÓRIO ---
   const agruparSaidas = () => {
     const grupos = saidas.reduce((acc, saida) => {
-      // Se não tiver lote, tratamos como se fosse um lote individual para efeitos visuais
       const chave = saida.lote_id || `avulso-${saida.id}`; 
-      
       if (!acc[chave]) {
-        acc[chave] = {
-          lote_id: chave,
-          data: saida.data,
-          total_faturado: 0,
-          itens: []
-        };
+        acc[chave] = { lote_id: chave, data: saida.data, total_faturado: 0, itens: [] };
       }
-      
       acc[chave].total_faturado += Number(saida.total_faturado);
       acc[chave].itens.push(saida);
       return acc;
     }, {} as Record<string, { lote_id: string; data: string; total_faturado: number; itens: Saida[] }>);
-
     return Object.values(grupos).sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
   };
 
@@ -244,6 +256,16 @@ export default function App() {
           <div><label style={labelStyle}>Palavra-passe</label><input type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} required style={inputStyle} /></div>
           <button type="submit" style={{ ...btnPrimary, marginTop: '10px' }}>Entrar</button>
         </form>
+        {alerta.visivel && (
+          <div style={modalOverlayStyle}>
+            <div style={modalBoxStyle}>
+              <div style={{ fontSize: '2.5rem', marginBottom: '10px' }}>{alerta.tipo === 'sucesso' ? '✅' : alerta.tipo === 'erro' ? '❌' : '⚠️'}</div>
+              <h3 style={{ margin: '0 0 10px 0', fontSize: '1.2rem', color: 'var(--text-primary)' }}>{alerta.titulo}</h3>
+              <p style={{ color: 'var(--text-secondary)', marginBottom: '25px', fontSize: '0.95rem' }}>{alerta.mensagem}</p>
+              <button onClick={fecharAlerta} style={btnPrimary}>OK</button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -288,7 +310,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 2. NOVO ECRÃ: RESUMO DA EXPEDIÇÃO (Carrinho) */}
+        {/* 2. ECRÃ: RESUMO DA EXPEDIÇÃO */}
         {ecraAtual === 'resumo_expedicao' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Lote de Expedição Atual</h2>
@@ -354,7 +376,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 4. FORMULÁRIO DE SAÍDA (Adiciona ao Lote) */}
+        {/* 4. FORMULÁRIO DE SAÍDA */}
         {ecraAtual === 'formulario_saida' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Detalhes da Peça</h2>
@@ -387,7 +409,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 5. REGISTAR NOVO PRODUTO (Catálogo) */}
+        {/* 5. REGISTAR NOVO PRODUTO */}
         {ecraAtual === 'novo_produto' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Novo Produto</h2>
@@ -427,7 +449,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 7. RELATÓRIO AGRUPADO POR LOTE */}
+        {/* 7. RELATÓRIO AGRUPADO */}
         {ecraAtual === 'relatorio' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Histórico Total</h2>
@@ -445,8 +467,6 @@ export default function App() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 {agruparSaidas().map(grupo => (
                   <div key={grupo.lote_id} style={{ backgroundColor: 'var(--surface-color)', border: '1px solid var(--border-color)', borderRadius: '12px', overflow: 'hidden' }}>
-                    
-                    {/* Cabeçalho do Lote */}
                     <div style={{ backgroundColor: 'rgba(255,255,255,0.03)', padding: '15px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <strong style={{ display: 'block', color: 'var(--primary-color)' }}>
@@ -456,8 +476,6 @@ export default function App() {
                       </div>
                       <div style={{ fontWeight: 'bold', fontSize: '1.2rem' }}>{grupo.total_faturado.toFixed(2)}€</div>
                     </div>
-
-                    {/* Itens dentro do Lote */}
                     <div style={{ padding: '10px' }}>
                       {grupo.itens.map(saida => (
                         <div key={saida.id} style={{ padding: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px dashed rgba(255,255,255,0.1)' }}>
@@ -480,24 +498,35 @@ export default function App() {
         )}
       </main>
 
-      {/* MODAL DE CONFIRMAÇÃO INTELIGENTE */}
+      {/* MODAL PARA ALERTAS GERAIS (Sucesso/Erro) */}
+      {alerta.visivel && (
+        <div style={{...modalOverlayStyle, zIndex: 2000}}>
+          <div style={modalBoxStyle}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '10px' }}>
+              {alerta.tipo === 'sucesso' ? '✅' : alerta.tipo === 'erro' ? '❌' : '⚠️'}
+            </div>
+            <h3 style={{ margin: '0 0 10px 0', fontSize: '1.2rem', color: 'var(--text-primary)' }}>{alerta.titulo}</h3>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: '25px', fontSize: '0.95rem', lineHeight: '1.4' }}>{alerta.mensagem}</p>
+            <button onClick={fecharAlerta} style={btnPrimary}>OK</button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMAÇÃO (Apagar/Cancelar) */}
       {modalConfirmacao.aberto && (
         <div style={modalOverlayStyle}>
           <div style={modalBoxStyle}>
             <div style={{ fontSize: '2.5rem', marginBottom: '10px' }}>
               {modalConfirmacao.tipo === 'logout' ? '🚪' : modalConfirmacao.tipo === 'cancelar_lote' ? '🛑' : '⚠️'}
             </div>
-            
             <h3 style={{ margin: '0 0 10px 0', fontSize: '1.2rem', color: 'var(--text-primary)' }}>
               {modalConfirmacao.tipo === 'logout' ? 'Terminar Sessão' : modalConfirmacao.tipo === 'cancelar_lote' ? 'Cancelar Expedição' : 'Confirmar Eliminação'}
             </h3>
-            
             <p style={{ color: 'var(--text-secondary)', marginBottom: '25px', fontSize: '0.95rem', lineHeight: '1.4' }}>
               {modalConfirmacao.tipo === 'logout' ? 'Tem a certeza que deseja sair da sua conta?' : 
                modalConfirmacao.tipo === 'cancelar_lote' ? 'Vai perder as peças que já adicionou a este lote. Deseja cancelar?' : 
                <>Tem a certeza que deseja apagar este registo?<br/>Esta ação não pode ser desfeita.</>}
             </p>
-            
             <div style={{ display: 'flex', gap: '10px' }}>
               <button onClick={cancelarModal} style={{ ...btnSecondary, padding: '12px', flex: 1 }}>Voltar</button>
               <button onClick={executarAcaoModal} style={{ ...btnPrimary, backgroundColor: modalConfirmacao.tipo === 'logout' ? 'var(--primary-color)' : '#ef4444', padding: '12px', flex: 1 }}>
