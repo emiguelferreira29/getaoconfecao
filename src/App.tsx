@@ -9,7 +9,9 @@ import './index.css';
 type Artigo = { id: number; codigo: string; nome: string; preco: number; };
 type Saida = { id: number; artigo_codigo: string; artigo_nome: string; quantidade: number; total_faturado: number; data: string; op_numero: string; tamanho: string; lote_id: string | null; };
 type ItemExpedicao = { artigo_codigo: string; artigo_nome: string; quantidade: number; total_faturado: number; op_numero: string; tamanho: string; };
-type Ecra = 'home' | 'catalogo' | 'novo_produto' | 'resumo_expedicao' | 'scanner' | 'formulario_saida' | 'relatorio';
+type Encomenda = { id: number; op_numero: string; artigo_codigo: string; artigo_nome: string; quantidade_pedida: number; estado: string; };
+type ItemNovaOp = { artigo: Artigo; quantidade: number; };
+type Ecra = 'home' | 'catalogo' | 'novo_produto' | 'resumo_expedicao' | 'scanner' | 'formulario_saida' | 'relatorio' | 'nova_encomenda' | 'escolher_expedicao';
 
 export default function App() {
   const [autenticado, setAutenticado] = useState<boolean>(() => localStorage.getItem('autenticadoConfecao') === 'true');
@@ -21,9 +23,21 @@ export default function App() {
 
   const [artigos, setArtigos] = useState<Artigo[]>([]);
   const [saidas, setSaidas] = useState<Saida[]>([]);
+  const [encomendas, setEncomendas] = useState<Encomenda[]>([]);
   const [aCarregar, setACarregar] = useState<boolean>(true);
   
+  // Estados para Expedição
+  const [modoExpedicao, setModoExpedicao] = useState<'livre' | 'op' | null>(null);
+  const [opSelecionada, setOpSelecionada] = useState<string>('');
   const [listaExpedicao, setListaExpedicao] = useState<ItemExpedicao[]>([]);
+  
+  // Estados para nova OP (Entrada)
+  const [novaOpNumero, setNovaOpNumero] = useState('');
+  const [novaOpLista, setNovaOpLista] = useState<ItemNovaOp[]>([]);
+  const [novaOpArtigo, setNovaOpArtigo] = useState<Artigo | null>(null);
+  const [novaOpQtd, setNovaOpQtd] = useState('');
+
+  // Estados para Formulario Saida
   const [modoSaida, setModoSaida] = useState<'scanner' | 'manual' | null>(null);
   const [artigoSelecionado, setArtigoSelecionado] = useState<Artigo | null>(null);
   const [pausarCamara, setPausarCamara] = useState<boolean>(false);
@@ -31,30 +45,32 @@ export default function App() {
   const [formTamanho, setFormTamanho] = useState('');
   const [formQtd, setFormQtd] = useState('');
   
+  // Estados Catalogo
   const [novoCod, setNovoCod] = useState('');
   const [novoNome, setNovoNome] = useState('');
   const [novoPreco, setNovoPreco] = useState('');
   const [editandoPrecoId, setEditandoPrecoId] = useState<number | null>(null);
   const [precoEditado, setPrecoEditado] = useState<string>('');
 
-  // MODAL ATUALIZADO (agora aceita "idParaApagar" como string para podermos passar o LOTE_ID)
   const [modalConfirmacao, setModalConfirmacao] = useState<{ aberto: boolean; tipo: 'saida' | 'artigo' | 'logout' | 'cancelar_lote' | 'lote_inteiro' | null; idParaApagar: number | string | null }>({ aberto: false, tipo: null, idParaApagar: null });
   const [alerta, setAlerta] = useState<{ visivel: boolean; titulo: string; mensagem: string; tipo: 'sucesso' | 'erro' | 'aviso' }>({ visivel: false, titulo: '', mensagem: '', tipo: 'sucesso' });
 
-  const mostrarAlerta = (titulo: string, mensagem: string, tipo: 'sucesso' | 'erro' | 'aviso' = 'aviso') => {
-    setAlerta({ visivel: true, titulo, mensagem, tipo });
-  };
+  const mostrarAlerta = (titulo: string, mensagem: string, tipo: 'sucesso' | 'erro' | 'aviso' = 'aviso') => { setAlerta({ visivel: true, titulo, mensagem, tipo }); };
   const fecharAlerta = () => setAlerta({ ...alerta, visivel: false });
 
   useEffect(() => { if (autenticado) carregarDados(); }, [autenticado]);
 
   async function carregarDados() {
     setACarregar(true);
-    const { data: dadosArtigos, error: erroArtigos } = await supabase.from('artigos').select('*').order('codigo');
-    if (erroArtigos) { mostrarAlerta('Erro', erroArtigos.message, 'erro'); } else if (dadosArtigos) setArtigos(dadosArtigos);
+    const { data: dadosArtigos } = await supabase.from('artigos').select('*').order('codigo');
+    if (dadosArtigos) setArtigos(dadosArtigos);
 
-    const { data: dadosSaidas, error: erroSaidas } = await supabase.from('saidas').select('*').order('data', { ascending: false });
-    if (erroSaidas) { mostrarAlerta('Erro', erroSaidas.message, 'erro'); } else if (dadosSaidas) setSaidas(dadosSaidas);
+    const { data: dadosSaidas } = await supabase.from('saidas').select('*').order('data', { ascending: false });
+    if (dadosSaidas) setSaidas(dadosSaidas);
+
+    // Carregar apenas Encomendas Pendentes
+    const { data: dadosEnc } = await supabase.from('encomendas').select('*').eq('estado', 'pendente');
+    if (dadosEnc) setEncomendas(dadosEnc);
     
     setACarregar(false);
   }
@@ -68,33 +84,65 @@ export default function App() {
 
   const handleLogout = () => setModalConfirmacao({ aberto: true, tipo: 'logout', idParaApagar: null });
 
+  // --- REGISTAR NOVA ENCOMENDA (ENTRADA) ---
+  const adicionarItemNovaOp = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!novaOpArtigo) return mostrarAlerta('Atenção', 'Selecione um artigo.', 'aviso');
+    const qtd = parseInt(novaOpQtd);
+    if (isNaN(qtd) || qtd <= 0) return mostrarAlerta('Atenção', 'Quantidade inválida.', 'aviso');
+    setNovaOpLista([...novaOpLista, { artigo: novaOpArtigo, quantidade: qtd }]);
+    setNovaOpArtigo(null); setNovaOpQtd('');
+  };
+
+  const guardarNovaEncomenda = async () => {
+    if (!novaOpNumero) return mostrarAlerta('Atenção', 'Indique o número da OP.', 'aviso');
+    if (novaOpLista.length === 0) return mostrarAlerta('Atenção', 'Adicione pelo menos um artigo à OP.', 'aviso');
+
+    const dadosParaInserir = novaOpLista.map(item => ({
+      op_numero: novaOpNumero,
+      artigo_codigo: item.artigo.codigo,
+      artigo_nome: item.artigo.nome,
+      quantidade_pedida: item.quantidade
+    }));
+
+    const { error } = await supabase.from('encomendas').insert(dadosParaInserir);
+    if (error) mostrarAlerta('Erro', error.message, 'erro');
+    else {
+      mostrarAlerta('Sucesso', `A ${novaOpNumero} foi registada com sucesso!`, 'sucesso');
+      setNovaOpNumero(''); setNovaOpLista([]); carregarDados(); setEcraAtual('home');
+    }
+  };
+
+  // --- LÓGICA DE CATÁLOGO ---
   const registarNovoProduto = async (e: React.FormEvent) => {
     e.preventDefault();
     const precoNum = parseFloat(novoPreco.replace(',', '.'));
     if (!novoCod || !novoNome || isNaN(precoNum)) return mostrarAlerta('Atenção', 'Preencha todos os campos corretamente.', 'aviso');
-
     const { error } = await supabase.from('artigos').insert({ codigo: novoCod, nome: novoNome, preco: precoNum });
-    if (error) mostrarAlerta('Erro ao Guardar', error.message, 'erro');
-    else { 
-      mostrarAlerta('Sucesso', 'Produto registado!', 'sucesso');
-      setNovoCod(''); setNovoNome(''); setNovoPreco(''); carregarDados(); setEcraAtual('catalogo'); 
-    }
+    if (error) mostrarAlerta('Erro', error.message, 'erro'); else { mostrarAlerta('Sucesso', 'Produto registado!', 'sucesso'); setNovoCod(''); setNovoNome(''); setNovoPreco(''); carregarDados(); setEcraAtual('catalogo'); }
   };
 
   const guardarNovoPreco = async (id: number) => {
     const precoNum = parseFloat(precoEditado.replace(',', '.'));
-    if (isNaN(precoNum) || precoNum < 0) return mostrarAlerta('Atenção', 'Preço inválido.', 'aviso');
+    if (isNaN(precoNum) || precoNum < 0) return;
     const { error } = await supabase.from('artigos').update({ preco: precoNum }).eq('id', id);
-    if (error) mostrarAlerta('Erro', error.message, 'erro'); else { setEditandoPrecoId(null); carregarDados(); }
+    if (!error) { setEditandoPrecoId(null); carregarDados(); }
   };
 
-  const iniciarNovaExpedicao = () => { setListaExpedicao([]); setEcraAtual('resumo_expedicao'); };
+  // --- LÓGICA DE EXPEDIÇÃO (NOVA) ---
+  const iniciarExpedicaoLivre = () => {
+    setModoExpedicao('livre'); setOpSelecionada(''); setListaExpedicao([]); setFormOP(''); setEcraAtual('resumo_expedicao');
+  };
+
+  const iniciarExpedicaoOP = () => {
+    if (!opSelecionada) return mostrarAlerta('Atenção', 'Selecione uma OP pendente.', 'aviso');
+    setModoExpedicao('op'); setListaExpedicao([]); setFormOP(opSelecionada); setEcraAtual('resumo_expedicao');
+  };
 
   const processarLeituraScanner = (codigosLidos: any[]) => {
     if (codigosLidos.length === 0 || pausarCamara) return;
     const codigoQR = codigosLidos[0].rawValue;
     setPausarCamara(true);
-
     const artigo = artigos.find(a => a.codigo === codigoQR);
     if (artigo) {
       setArtigoSelecionado(artigo); setEcraAtual('formulario_saida');
@@ -106,14 +154,17 @@ export default function App() {
 
   const adicionarAoLote = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!artigoSelecionado) return mostrarAlerta('Atenção', 'Selecione um artigo.', 'aviso');
+    if (!artigoSelecionado) return;
     const qtdNum = parseInt(formQtd);
-    if (isNaN(qtdNum) || qtdNum <= 0) return mostrarAlerta('Atenção', 'Quantidade inválida.', 'aviso');
+    if (isNaN(qtdNum) || qtdNum <= 0) return;
+    
+    // Se for modo OP, obriga a que a OP enviada seja a selecionada
+    const opAUsar = modoExpedicao === 'op' ? opSelecionada : formOP;
 
     const novoItem: ItemExpedicao = {
       artigo_codigo: artigoSelecionado.codigo, artigo_nome: artigoSelecionado.nome,
       quantidade: qtdNum, total_faturado: qtdNum * artigoSelecionado.preco,
-      op_numero: formOP, tamanho: formTamanho
+      op_numero: opAUsar, tamanho: formTamanho
     };
 
     setListaExpedicao([...listaExpedicao, novoItem]);
@@ -130,33 +181,44 @@ export default function App() {
     const hoje = new Date();
     const dia = hoje.getDate().toString().padStart(2, '0');
     const mes = (hoje.getMonth() + 1).toString().padStart(2, '0');
-    const ano = hoje.getFullYear();
-    const prefixo = `Expedição ${dia}${mes}${ano}-`;
+    const prefixo = `Expedição ${dia}${mes}${hoje.getFullYear()}-`;
 
     const lotesDeHoje = saidas.map(s => s.lote_id).filter(id => id && id.startsWith(prefixo)) as string[];
-    const lotesUnicos = Array.from(new Set(lotesDeHoje));
-    
     let maxNum = 0;
-    lotesUnicos.forEach(lote => {
-      const partes = lote.split('-');
-      const num = parseInt(partes[partes.length - 1]);
+    Array.from(new Set(lotesDeHoje)).forEach(lote => {
+      const num = parseInt(lote.split('-')[1]);
       if (!isNaN(num) && num > maxNum) maxNum = num;
     });
 
     const novoLoteId = `${prefixo}${maxNum + 1}`;
-    
     const dadosParaInserir = listaExpedicao.map(item => ({ ...item, lote_id: novoLoteId }));
     const { error } = await supabase.from('saidas').insert(dadosParaInserir);
 
-    if (error) mostrarAlerta('Erro', error.message, 'erro');
-    else {
-      mostrarAlerta('Expedição Concluída', `O lote "${novoLoteId}" foi registado com sucesso!`, 'sucesso');
-      setListaExpedicao([]); setFormOP(''); setFormTamanho('');
-      carregarDados(); setEcraAtual('home');
+    if (error) return mostrarAlerta('Erro', error.message, 'erro');
+
+    // DESCONTO AUTOMÁTICO NA ENCOMENDA
+    if (modoExpedicao === 'op' && opSelecionada) {
+      const itensDaOp = encomendas.filter(e => e.op_numero === opSelecionada);
+      for (const enc of itensDaOp) {
+        // Quanto é que enviámos agora deste artigo especificamente?
+        const qtdEnviada = listaExpedicao.filter(l => l.artigo_codigo === enc.artigo_codigo).reduce((sum, curr) => sum + curr.quantidade, 0);
+        if (qtdEnviada > 0) {
+          const novaQtd = enc.quantidade_pedida - qtdEnviada;
+          if (novaQtd <= 0) {
+            await supabase.from('encomendas').update({ estado: 'concluida', quantidade_pedida: 0 }).eq('id', enc.id);
+          } else {
+            await supabase.from('encomendas').update({ quantidade_pedida: novaQtd }).eq('id', enc.id);
+          }
+        }
+      }
     }
+
+    mostrarAlerta('Expedição Concluída', `O lote "${novoLoteId}" foi registado com sucesso!`, 'sucesso');
+    setListaExpedicao([]); setFormOP(''); setFormTamanho('');
+    carregarDados(); setEcraAtual('home');
   };
 
-  // --- MÉTODOS DOS MODAIS ---
+  // --- MÉTODOS DE RELATÓRIO E MODAIS ---
   const pedirConfirmacaoApagar = (id: number, tipo: 'saida' | 'artigo') => { setModalConfirmacao({ aberto: true, tipo, idParaApagar: id }); };
   const pedirConfirmacaoApagarLoteInteiro = (lote_id: string) => { setModalConfirmacao({ aberto: true, tipo: 'lote_inteiro', idParaApagar: lote_id }); };
   
@@ -171,29 +233,19 @@ export default function App() {
     const { idParaApagar, tipo } = modalConfirmacao;
     if (!tipo) return;
     
-    if (tipo === 'logout') { 
-      setAutenticado(false); localStorage.removeItem('autenticadoConfecao'); setEcraAtual('home'); 
-    }
-    else if (tipo === 'cancelar_lote') { 
-      setListaExpedicao([]); setEcraAtual('home'); 
-    }
+    if (tipo === 'logout') { setAutenticado(false); localStorage.removeItem('autenticadoConfecao'); setEcraAtual('home'); }
+    else if (tipo === 'cancelar_lote') { setListaExpedicao([]); setEcraAtual('home'); }
     else if (tipo === 'saida' && idParaApagar) {
-      const { error } = await supabase.from('saidas').delete().eq('id', idParaApagar);
-      if (!error) setSaidas(saidas.filter(s => s.id !== idParaApagar)); else mostrarAlerta('Erro', error.message, 'erro');
+      await supabase.from('saidas').delete().eq('id', idParaApagar);
+      carregarDados();
     }
     else if (tipo === 'artigo' && idParaApagar) {
-      const { error } = await supabase.from('artigos').delete().eq('id', idParaApagar);
-      if (!error) setArtigos(artigos.filter(a => a.id !== idParaApagar)); else mostrarAlerta('Erro', error.message, 'erro');
+      await supabase.from('artigos').delete().eq('id', idParaApagar);
+      carregarDados();
     }
-    // NOVO: Lógica para apagar um lote de expedição inteiro
     else if (tipo === 'lote_inteiro' && idParaApagar) {
       const { error } = await supabase.from('saidas').delete().eq('lote_id', idParaApagar as string);
-      if (!error) {
-        setSaidas(saidas.filter(s => s.lote_id !== idParaApagar));
-        mostrarAlerta('Sucesso', 'A expedição foi totalmente eliminada.', 'sucesso');
-      } else {
-        mostrarAlerta('Erro', error.message, 'erro');
-      }
+      if (!error) { carregarDados(); mostrarAlerta('Sucesso', 'A expedição foi eliminada.', 'sucesso'); }
     }
     setModalConfirmacao({ aberto: false, tipo: null, idParaApagar: null });
   };
@@ -208,27 +260,28 @@ export default function App() {
     return Object.values(grupos).sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
   };
 
+  const obterOportunidadesPendentes = () => {
+    const ops = encomendas.map(e => e.op_numero);
+    return Array.from(new Set(ops)); // Apenas OPs unicas
+  };
+
   // --- GERAÇÃO DE PDF ---
   const gerarPDF = (grupo: any, comPrecos: boolean) => {
     const doc = new jsPDF();
     doc.setFontSize(18); doc.setTextColor(37, 99, 235); doc.text(`Nota de Expedicao: ${grupo.lote_id}`, 14, 20);
     doc.setFontSize(11); doc.setTextColor(100); doc.text(`Data e Hora: ${new Date(grupo.data).toLocaleString('pt-PT')}`, 14, 28);
-    
-    if (comPrecos) {
-      doc.setTextColor(220, 38, 38); doc.text('DOCUMENTO INTERNO - COM VALORES', 14, 34);
-    } else {
-      doc.setTextColor(0); doc.text('DOCUMENTO DE ACOMPANHAMENTO DE MERCADORIA', 14, 34);
-    }
+    if (comPrecos) { doc.setTextColor(220, 38, 38); doc.text('DOCUMENTO INTERNO - COM VALORES', 14, 34); } 
+    else { doc.setTextColor(0); doc.text('DOCUMENTO DE ACOMPANHAMENTO DE MERCADORIA', 14, 34); }
 
     const colunas = comPrecos ? ['Referencia / Artigo', 'Ordem Prod. (OP)', 'Tamanho', 'Qtd', 'Total EUR'] : ['Referencia / Artigo', 'Ordem Prod. (OP)', 'Tamanho', 'Qtd'];
-    const linhas = grupo.itens.map((item: Saida) => {
-      if (comPrecos) return [`${item.artigo_codigo} - ${item.artigo_nome}`, item.op_numero, item.tamanho, item.quantidade.toString(), `${Number(item.total_faturado).toFixed(2)}`];
-      return [`${item.artigo_codigo} - ${item.artigo_nome}`, item.op_numero, item.tamanho, item.quantidade.toString()];
-    });
+    const linhas = grupo.itens.map((i: Saida) => comPrecos 
+      ? [`${i.artigo_codigo} - ${i.artigo_nome}`, i.op_numero, i.tamanho, i.quantidade.toString(), `${Number(i.total_faturado).toFixed(2)}`] 
+      : [`${i.artigo_codigo} - ${i.artigo_nome}`, i.op_numero, i.tamanho, i.quantidade.toString()]
+    );
 
     autoTable(doc, { startY: 40, head: [colunas], body: linhas, theme: 'grid', headStyles: { fillColor: [37, 99, 235] }, styles: { fontSize: 10, cellPadding: 4 } });
 
-    const totalQtd = grupo.itens.reduce((acc: number, item: Saida) => acc + item.quantidade, 0);
+    const totalQtd = grupo.itens.reduce((acc: number, i: Saida) => acc + i.quantidade, 0);
     const finalY = (doc as any).lastAutoTable.finalY + 15;
     
     doc.setFontSize(12); doc.setTextColor(0); doc.text(`Total de Pecas Expedidas: ${totalQtd} un.`, 14, finalY);
@@ -237,7 +290,7 @@ export default function App() {
     doc.save(`${grupo.lote_id}${comPrecos ? '_INTERNO' : '_CLIENTE'}.pdf`);
   };
 
-  // --- ECRÃ DE LOGIN ---
+  // --- INTERFACE (UI) ---
   if (!autenticado) {
     return (
       <div style={{ maxWidth: '600px', margin: '0 auto', minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '20px', backgroundColor: 'var(--bg-color)', animation: 'fadeIn 0.5s' }}>
@@ -248,16 +301,6 @@ export default function App() {
           <div><label style={labelStyle}>Palavra-passe</label><input type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} required style={inputStyle} /></div>
           <button type="submit" style={{ ...btnPrimary, marginTop: '10px' }}>Entrar</button>
         </form>
-        {alerta.visivel && (
-          <div style={{...modalOverlayStyle, zIndex: 2000}}>
-            <div style={modalBoxStyle}>
-              <div style={{ fontSize: '2.5rem', marginBottom: '10px' }}>{alerta.tipo === 'sucesso' ? '✅' : alerta.tipo === 'erro' ? '❌' : '⚠️'}</div>
-              <h3 style={{ margin: '0 0 10px 0', fontSize: '1.2rem', color: 'var(--text-primary)' }}>{alerta.titulo}</h3>
-              <p style={{ color: 'var(--text-secondary)', marginBottom: '25px', fontSize: '0.95rem' }}>{alerta.mensagem}</p>
-              <button onClick={fecharAlerta} style={btnPrimary}>OK</button>
-            </div>
-          </div>
-        )}
       </div>
     );
   }
@@ -282,29 +325,122 @@ export default function App() {
 
       <main style={{ padding: '20px', paddingBottom: '90px' }}>
         
+        {/* PÁGINA INICIAL */}
         {ecraAtual === 'home' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '10px' }}>Painel Principal</h2>
-            <button onClick={iniciarNovaExpedicao} style={{...btnPrimary, padding: '20px', fontSize: '1.1rem'}}>📦 Nova Expedição de Lote</button>
-            <button onClick={() => setEcraAtual('novo_produto')} style={btnSecondary}>➕ Registar Novo Produto</button>
+            <button onClick={() => setEcraAtual('nova_encomenda')} style={{...btnPrimary, padding: '20px', fontSize: '1.1rem', backgroundColor: '#8b5cf6'}}>📥 Registar Entrada (Nova OP)</button>
+            <button onClick={() => setEcraAtual('escolher_expedicao')} style={{...btnPrimary, padding: '20px', fontSize: '1.1rem'}}>📦 Registar Saída (Expedição)</button>
+            
             <div style={{ borderTop: '1px solid var(--border-color)', margin: '20px 0' }}></div>
+            
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-              <button onClick={() => setEcraAtual('catalogo')} style={btnCard}><span style={{ fontSize: '2rem', display: 'block', marginBottom: '10px' }}>📋</span>Catálogo</button>
-              <button onClick={() => setEcraAtual('relatorio')} style={btnCard}><span style={{ fontSize: '2rem', display: 'block', marginBottom: '10px' }}>📊</span>Relatórios</button>
+              <button onClick={() => setEcraAtual('novo_produto')} style={btnSecondary}>➕ Novo Produto</button>
+              <button onClick={() => setEcraAtual('catalogo')} style={btnCard}>📋 Catálogo</button>
+              <button onClick={() => setEcraAtual('relatorio')} style={{...btnCard, gridColumn: 'span 2'}}>📊 Relatórios Totais</button>
             </div>
           </div>
         )}
 
+        {/* REGISTAR ENTRADA (NOVA OP) */}
+        {ecraAtual === 'nova_encomenda' && (
+          <div style={{ animation: 'fadeIn 0.3s' }}>
+            <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Nova Encomenda (Entrada)</h2>
+            
+            <div style={{ marginBottom: '25px' }}>
+              <label style={labelStyle}>Número da OP (ex: OP-001)</label>
+              <input type="text" value={novaOpNumero} onChange={e => setNovaOpNumero(e.target.value)} required style={inputStyle} />
+            </div>
+
+            <div style={{ backgroundColor: 'var(--surface-color)', padding: '15px', borderRadius: '12px', marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '1.1rem', marginBottom: '15px' }}>Adicionar Material à OP</h3>
+              <form onSubmit={adicionarItemNovaOp} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <select value={novaOpArtigo?.id || ''} onChange={e => setNovaOpArtigo(artigos.find(a => a.id === parseInt(e.target.value)) || null)} required style={inputStyle}>
+                  <option value="" disabled>Escolha o artigo...</option>
+                  {artigos.map(a => <option key={a.id} value={a.id}>{a.codigo} - {a.nome}</option>)}
+                </select>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <input type="number" min="1" placeholder="Quantidade" value={novaOpQtd} onChange={e => setNovaOpQtd(e.target.value)} required style={{...inputStyle, flex: 1}} />
+                  <button type="submit" style={{...btnPrimary, width: 'auto', padding: '0 20px'}}>Adicionar</button>
+                </div>
+              </form>
+            </div>
+
+            <h3 style={{ fontSize: '1.1rem', marginBottom: '10px' }}>Lista da OP ({novaOpLista.length})</h3>
+            {novaOpLista.map((item, i) => (
+              <div key={i} style={{ backgroundColor: 'var(--surface-color)', padding: '12px', borderRadius: '8px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
+                <span>{item.quantidade}x {item.artigo.nome}</span>
+                <button onClick={() => setNovaOpLista(novaOpLista.filter((_, index) => index !== i))} style={{ background: 'none', border: 'none', color: '#ef4444' }}>✕</button>
+              </div>
+            ))}
+
+            {novaOpLista.length > 0 && (
+              <button onClick={guardarNovaEncomenda} style={{...btnPrimary, marginTop: '20px', backgroundColor: '#8b5cf6'}}>💾 Guardar OP Completa</button>
+            )}
+          </div>
+        )}
+
+        {/* ESCOLHER MODO DE EXPEDIÇÃO */}
+        {ecraAtual === 'escolher_expedicao' && (
+          <div style={{ animation: 'fadeIn 0.3s' }}>
+            <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Modo de Expedição</h2>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div style={{ backgroundColor: 'var(--surface-color)', padding: '20px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                <h3 style={{ margin: '0 0 10px 0', color: 'var(--primary-color)' }}>🎯 Expedição por OP (Inteligente)</h3>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '15px' }}>O sistema ajuda a controlar as quantidades exatas que faltam entregar.</p>
+                <select value={opSelecionada} onChange={e => setOpSelecionada(e.target.value)} style={{...inputStyle, marginBottom: '15px'}}>
+                  <option value="" disabled>Selecione a OP pendente...</option>
+                  {obterOportunidadesPendentes().map(op => <option key={op} value={op}>{op}</option>)}
+                </select>
+                <button onClick={iniciarExpedicaoOP} style={btnPrimary}>Iniciar Expedição Desta OP</button>
+              </div>
+
+              <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontWeight: 'bold' }}>OU</div>
+
+              <div style={{ backgroundColor: 'var(--surface-color)', padding: '20px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                <h3 style={{ margin: '0 0 10px 0' }}>🔓 Expedição Livre (Manual)</h3>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '15px' }}>Envio direto de peças avulsas sem controlo de encomendas prévias.</p>
+                <button onClick={iniciarExpedicaoLivre} style={btnSecondary}>Iniciar Expedição Livre</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ECRÃ: RESUMO DA EXPEDIÇÃO */}
         {ecraAtual === 'resumo_expedicao' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
-            <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Lote de Expedição Atual</h2>
+            <h2 style={{ fontSize: '1.5rem', marginBottom: '10px' }}>
+              {modoExpedicao === 'op' ? `Lote de Expedição (${opSelecionada})` : 'Lote de Expedição Livre'}
+            </h2>
             
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '25px' }}>
               <button onClick={() => { setModoSaida('scanner'); setPausarCamara(false); setEcraAtual('scanner'); }} style={{...btnSecondary, borderStyle: 'dashed'}}>📷 Picar Código</button>
               <button onClick={() => { setModoSaida('manual'); setArtigoSelecionado(null); setEcraAtual('formulario_saida'); }} style={{...btnSecondary, borderStyle: 'dashed'}}>✍️ Inserir Manual</button>
             </div>
 
-            <h3 style={{ fontSize: '1.1rem', marginBottom: '10px' }}>Peças no Lote ({listaExpedicao.length})</h3>
+            {/* PAINEL DE CONTROLO INTELIGENTE (Só aparece no modo OP) */}
+            {modoExpedicao === 'op' && (
+              <div style={{ backgroundColor: 'var(--surface-color)', padding: '15px', borderRadius: '12px', marginBottom: '25px', border: '1px solid var(--border-color)' }}>
+                <h3 style={{ fontSize: '1rem', color: 'var(--text-secondary)', marginBottom: '10px', textTransform: 'uppercase' }}>Falta Entregar nesta OP:</h3>
+                {encomendas.filter(e => e.op_numero === opSelecionada).map(enc => {
+                  const qtdLida = listaExpedicao.filter(l => l.artigo_codigo === enc.artigo_codigo).reduce((sum, curr) => sum + curr.quantidade, 0);
+                  const concluido = qtdLida >= enc.quantidade_pedida;
+                  return (
+                    <div key={enc.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px dashed rgba(255,255,255,0.05)' }}>
+                      <span style={{ color: concluido ? '#22c55e' : 'var(--text-primary)', textDecoration: concluido ? 'line-through' : 'none' }}>
+                        {enc.artigo_nome}
+                      </span>
+                      <strong style={{ color: concluido ? '#22c55e' : '#ef4444' }}>
+                        {qtdLida} / {enc.quantidade_pedida} {concluido ? '✅' : ''}
+                      </strong>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <h3 style={{ fontSize: '1.1rem', marginBottom: '10px' }}>Peças Lidas ({listaExpedicao.length})</h3>
             
             {listaExpedicao.length === 0 ? (
               <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '30px 0', border: '1px dashed var(--border-color)', borderRadius: '12px' }}>O lote está vazio. Comece a picar material!</p>
@@ -331,14 +467,13 @@ export default function App() {
                   <span>Faturação do Lote:</span>
                   <span style={{ color: 'var(--primary-color)' }}>{listaExpedicao.reduce((sum, item) => sum + item.total_faturado, 0).toFixed(2)}€</span>
                 </div>
-                <button onClick={finalizarExpedicao} style={{...btnPrimary, backgroundColor: '#22c55e'}}>
-                  💾 Registar e Finalizar Lote
-                </button>
+                <button onClick={finalizarExpedicao} style={{...btnPrimary, backgroundColor: '#22c55e'}}>💾 Registar e Finalizar Lote</button>
               </div>
             )}
           </div>
         )}
 
+        {/* SCANNER */}
         {ecraAtual === 'scanner' && (
           <div style={{ animation: 'fadeIn 0.3s', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '10px' }}>Ler Peça</h2>
@@ -349,6 +484,7 @@ export default function App() {
           </div>
         )}
 
+        {/* FORMULÁRIO DE SAÍDA */}
         {ecraAtual === 'formulario_saida' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Detalhes da Peça</h2>
@@ -366,11 +502,16 @@ export default function App() {
               </div>
               <div>
                 <label style={labelStyle}>OP n.º (Ordem de Produção)</label>
-                <input type="text" value={formOP} onChange={e => setFormOP(e.target.value)} required placeholder="Ex: OP-2024-15" style={inputStyle} />
-                <small style={{color: 'var(--text-secondary)'}}>A OP fica gravada para a próxima peça automaticamente.</small>
+                {modoExpedicao === 'op' ? (
+                  <div style={{ padding: '12px', backgroundColor: 'var(--surface-color)', borderRadius: '8px', border: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
+                    Bloqueado à {opSelecionada}
+                  </div>
+                ) : (
+                  <input type="text" value={formOP} onChange={e => setFormOP(e.target.value)} required placeholder="Ex: OP-001" style={inputStyle} />
+                )}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                <div><label style={labelStyle}>Tamanho</label><input type="text" value={formTamanho} onChange={e => setFormTamanho(e.target.value)} required style={inputStyle} /></div>
+                <div><label style={labelStyle}>Tamanho (Ex: Vários)</label><input type="text" value={formTamanho} onChange={e => setFormTamanho(e.target.value)} required style={inputStyle} /></div>
                 <div><label style={labelStyle}>Quantidade</label><input type="number" min="1" value={formQtd} onChange={e => setFormQtd(e.target.value)} required style={inputStyle} /></div>
               </div>
               <button type="submit" style={btnPrimary}>➕ Adicionar ao Lote</button>
@@ -378,6 +519,7 @@ export default function App() {
           </div>
         )}
 
+        {/* NOVO PRODUTO (CATÁLOGO) */}
         {ecraAtual === 'novo_produto' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Novo Produto</h2>
@@ -390,6 +532,7 @@ export default function App() {
           </div>
         )}
 
+        {/* CATÁLOGO */}
         {ecraAtual === 'catalogo' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Catálogo ({artigos.length})</h2>
@@ -416,52 +559,36 @@ export default function App() {
           </div>
         )}
 
+        {/* RELATÓRIO */}
         {ecraAtual === 'relatorio' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Histórico Total</h2>
-            
             <div style={{ background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', padding: '20px', borderRadius: '16px', marginBottom: '25px' }}>
               <p style={{ color: 'rgba(255,255,255,0.8)', margin: '0 0 5px 0', fontSize: '0.9rem' }}>Faturação Global</p>
               <h3 style={{ margin: 0, fontSize: '2.5rem', color: 'white' }}>{saidas.reduce((soma, saida) => soma + Number(saida.total_faturado), 0).toFixed(2)}€</h3>
             </div>
-
-            {saidas.length === 0 ? (
-              <p style={{ color: 'var(--text-secondary)', textAlign: 'center' }}>Nenhum movimento registado.</p>
-            ) : (
+            {saidas.length === 0 ? <p style={{ color: 'var(--text-secondary)', textAlign: 'center' }}>Nenhum movimento registado.</p> : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 {agruparSaidas().map(grupo => (
                   <div key={grupo.lote_id} style={{ backgroundColor: 'var(--surface-color)', border: '1px solid var(--border-color)', borderRadius: '12px', overflow: 'hidden' }}>
                     <div style={{ backgroundColor: 'rgba(255,255,255,0.03)', padding: '15px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <strong style={{ display: 'block', color: 'var(--primary-color)' }}>
-                          {grupo.lote_id.startsWith('Expedição') ? `📦 ${grupo.lote_id}` : '📦 Registo Antigo'}
-                        </strong>
+                        <strong style={{ display: 'block', color: 'var(--primary-color)' }}>{grupo.lote_id.startsWith('Expedição') ? `📦 ${grupo.lote_id}` : '📦 Registo Antigo'}</strong>
                         <small style={{ color: 'var(--text-secondary)' }}>{new Date(grupo.data).toLocaleString('pt-PT')}</small>
                       </div>
-                      
-                      {/* BOTÃO DE APAGAR O LOTE INTEIRO AQUI */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
                         <div style={{ fontWeight: 'bold', fontSize: '1.2rem' }}>{grupo.total_faturado.toFixed(2)}€</div>
                         {grupo.lote_id.startsWith('Expedição') && (
-                          <button 
-                            onClick={() => pedirConfirmacaoApagarLoteInteiro(grupo.lote_id)} 
-                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.4rem', padding: '4px' }}
-                            title="Apagar Expedição Completa"
-                          >
-                            🗑️
-                          </button>
+                          <button onClick={() => pedirConfirmacaoApagarLoteInteiro(grupo.lote_id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.4rem', padding: '4px' }}>🗑️</button>
                         )}
                       </div>
-
                     </div>
-                    
                     {grupo.lote_id.startsWith('Expedição') && (
                       <div style={{ display: 'flex', gap: '10px', padding: '15px 15px 0 15px' }}>
                         <button onClick={() => gerarPDF(grupo, false)} style={{...btnSecondary, padding: '10px', fontSize: '0.85rem', flex: 1}}>📄 Guia Cliente (Sem Preços)</button>
                         <button onClick={() => gerarPDF(grupo, true)} style={{...btnPrimary, padding: '10px', fontSize: '0.85rem', flex: 1}}>📄 Guia Interna</button>
                       </div>
                     )}
-
                     <div style={{ padding: '15px' }}>
                       {grupo.itens.map((saida: Saida) => (
                         <div key={saida.id} style={{ padding: '10px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px dashed rgba(255,255,255,0.1)' }}>
@@ -484,7 +611,7 @@ export default function App() {
         )}
       </main>
 
-      {/* MODAL PARA ALERTAS GERAIS */}
+      {/* ALERTAS */}
       {alerta.visivel && (
         <div style={{...modalOverlayStyle, zIndex: 2000}}>
           <div style={modalBoxStyle}>
@@ -496,28 +623,22 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL DE CONFIRMAÇÃO (Agora suporta 'lote_inteiro') */}
+      {/* MODAL DE CONFIRMAÇÃO */}
       {modalConfirmacao.aberto && (
         <div style={modalOverlayStyle}>
           <div style={modalBoxStyle}>
             <div style={{ fontSize: '2.5rem', marginBottom: '10px' }}>
               {modalConfirmacao.tipo === 'logout' ? '🚪' : modalConfirmacao.tipo === 'cancelar_lote' ? '🛑' : '⚠️'}
             </div>
-            
             <h3 style={{ margin: '0 0 10px 0', fontSize: '1.2rem', color: 'var(--text-primary)' }}>
-              {modalConfirmacao.tipo === 'logout' ? 'Terminar Sessão' : 
-               modalConfirmacao.tipo === 'cancelar_lote' ? 'Cancelar Expedição' : 
-               modalConfirmacao.tipo === 'lote_inteiro' ? 'Eliminar Lote Inteiro' : 
-               'Confirmar Eliminação'}
+              {modalConfirmacao.tipo === 'logout' ? 'Terminar Sessão' : modalConfirmacao.tipo === 'cancelar_lote' ? 'Cancelar Expedição' : modalConfirmacao.tipo === 'lote_inteiro' ? 'Eliminar Lote Inteiro' : 'Confirmar Eliminação'}
             </h3>
-            
             <p style={{ color: 'var(--text-secondary)', marginBottom: '25px', fontSize: '0.95rem', lineHeight: '1.4' }}>
               {modalConfirmacao.tipo === 'logout' ? 'Tem a certeza que deseja sair da sua conta?' : 
                modalConfirmacao.tipo === 'cancelar_lote' ? 'Vai perder as peças que já adicionou a este lote. Deseja cancelar?' : 
                modalConfirmacao.tipo === 'lote_inteiro' ? 'Tem a certeza que deseja apagar a expedição COMPLETA? Todas as peças deste lote vão ser apagadas.' :
                <>Tem a certeza que deseja apagar este registo?<br/>Esta ação não pode ser desfeita.</>}
             </p>
-            
             <div style={{ display: 'flex', gap: '10px' }}>
               <button onClick={cancelarModal} style={{ ...btnSecondary, padding: '12px', flex: 1 }}>Voltar</button>
               <button onClick={executarAcaoModal} style={{ ...btnPrimary, backgroundColor: modalConfirmacao.tipo === 'logout' ? 'var(--primary-color)' : '#ef4444', padding: '12px', flex: 1 }}>
@@ -537,10 +658,9 @@ export default function App() {
   );
 }
 
-// --- ESTILOS REUTILIZÁVEIS ---
 const btnPrimary: React.CSSProperties = { width: '100%', padding: '15px', backgroundColor: 'var(--primary-color)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer' };
 const btnSecondary: React.CSSProperties = { width: '100%', padding: '15px', backgroundColor: 'transparent', color: 'var(--text-primary)', border: '2px solid var(--border-color)', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer' };
-const btnCard: React.CSSProperties = { backgroundColor: 'var(--surface-color)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', padding: '20px', borderRadius: '12px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer', textAlign: 'center' };
+const btnCard: React.CSSProperties = { backgroundColor: 'var(--surface-color)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', padding: '20px', borderRadius: '12px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer', textAlign: 'center', height: '100%' };
 const inputStyle: React.CSSProperties = { width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-color)', color: 'var(--text-primary)', fontSize: '1rem', boxSizing: 'border-box' };
 const labelStyle: React.CSSProperties = { display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: 'bold' };
 const modalOverlayStyle: React.CSSProperties = { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(3px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 };
