@@ -74,7 +74,6 @@ export default function App() {
     const { data: dadosSaidas } = await supabase.from('saidas').select('*').order('data', { ascending: false });
     if (dadosSaidas) setSaidas(dadosSaidas);
 
-    // Carregamos TODAS as encomendas agora (pendentes e concluídas)
     const { data: dadosEnc } = await supabase.from('encomendas').select('*');
     if (dadosEnc) setEncomendas(dadosEnc);
     
@@ -299,7 +298,6 @@ export default function App() {
     return Array.from(new Set(ops));
   };
 
-  // --- AGRUPAR E ORDENAR OPs PENDENTES ---
   const agruparEncomendasPendentes = () => {
     const grupos: Record<string, { op_numero: string; data_entrega: string | null; itens: Encomenda[] }> = {};
     encomendas.filter(e => e.estado === 'pendente').forEach(enc => {
@@ -307,7 +305,6 @@ export default function App() {
       grupos[enc.op_numero].itens.push(enc);
     });
     
-    // ORDENAÇÃO: Mais antigas (atrasadas) primeiro. Sem data vão para o fim.
     return Object.values(grupos).sort((a, b) => {
       const dataA = a.data_entrega ? new Date(a.data_entrega).getTime() : Infinity;
       const dataB = b.data_entrega ? new Date(b.data_entrega).getTime() : Infinity;
@@ -315,7 +312,6 @@ export default function App() {
     });
   };
 
-  // --- AGRUPAR OPs CONCLUÍDAS ---
   const agruparEncomendasConcluidas = () => {
     const grupos: Record<string, { op_numero: string; itens: Encomenda[] }> = {};
     encomendas.filter(e => e.estado === 'concluida').forEach(enc => {
@@ -325,7 +321,6 @@ export default function App() {
     return Object.values(grupos);
   };
 
-  // --- OBTER LOTES DE UMA OP ESPECÍFICA (Para o ecrã de Concluídas) ---
   const obterLotesDaOP = (op_numero: string) => {
     const lotes = saidas.filter(s => s.op_numero === op_numero && s.lote_id).map(s => s.lote_id as string);
     return Array.from(new Set(lotes));
@@ -434,7 +429,7 @@ export default function App() {
           </div>
         )}
 
-        {/* ECRÃ OPs PENDENTES COM EDIÇÃO (ORDENADO) */}
+        {/* ECRÃ OPs PENDENTES */}
         {ecraAtual === 'encomendas_pendentes' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Encomendas por Entregar</h2>
@@ -464,7 +459,6 @@ export default function App() {
                               <label style={{...labelStyle, fontSize: '0.85rem'}}>Nova Data de Entrega:</label>
                               <input type="date" value={editOpData} onChange={e => setEditOpData(e.target.value)} style={{...inputStyle, padding: '8px'}} />
                             </div>
-                            
                             <div>
                               <label style={{...labelStyle, fontSize: '0.85rem'}}>Ajustar Quantidades (Faltam entregar):</label>
                               {grupo.itens.map(item => (
@@ -480,7 +474,6 @@ export default function App() {
                                 </div>
                               ))}
                             </div>
-                            
                             <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                               <button onClick={() => setEditandoOpId(null)} style={{...btnSecondary, padding: '10px', flex: 1}}>Cancelar</button>
                               <button onClick={() => guardarEdicaoOp(grupo.op_numero)} style={{...btnPrimary, backgroundColor: '#22c55e', padding: '10px', flex: 1}}>Guardar</button>
@@ -506,7 +499,7 @@ export default function App() {
           </div>
         )}
 
-        {/* NOVO ECRÃ: OPs CONCLUÍDAS */}
+        {/* ECRÃ OPs CONCLUÍDAS */}
         {ecraAtual === 'encomendas_concluidas' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>OPs Concluídas</h2>
@@ -527,19 +520,31 @@ export default function App() {
                       {lotesAssociados.length > 0 && (
                         <div style={{ padding: '15px', backgroundColor: 'rgba(255,255,255,0.02)' }}>
                           <h4 style={{ margin: '0 0 10px 0', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Guias de Expedição Associadas:</h4>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                             {lotesAssociados.map(loteId => (
-                              <button 
-                                key={loteId}
-                                onClick={() => {
-                                  const loteData = agruparSaidas().find(g => g.lote_id === loteId);
-                                  if (loteData) gerarPDF(loteData, false);
-                                }}
-                                style={{ ...btnSecondary, padding: '8px', fontSize: '0.9rem', display: 'flex', justifyContent: 'space-between' }}
-                              >
-                                <span>📦 {loteId}</span>
-                                <span>📄 Imprimir</span>
-                              </button>
+                              <div key={loteId} style={{ backgroundColor: 'var(--bg-color)', padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                                <div style={{ marginBottom: '10px', fontWeight: 'bold', color: 'var(--primary-color)' }}>📦 {loteId}</div>
+                                <div style={{ display: 'flex', gap: '10px' }}>
+                                  <button 
+                                    onClick={() => {
+                                      const loteData = agruparSaidas().find(g => g.lote_id === loteId);
+                                      if (loteData) gerarPDF(loteData, false);
+                                    }} 
+                                    style={{ ...btnSecondary, padding: '8px', fontSize: '0.85rem', flex: 1 }}
+                                  >
+                                    📄 Guia Cliente
+                                  </button>
+                                  <button 
+                                    onClick={() => {
+                                      const loteData = agruparSaidas().find(g => g.lote_id === loteId);
+                                      if (loteData) gerarPDF(loteData, true);
+                                    }} 
+                                    style={{ ...btnPrimary, padding: '8px', fontSize: '0.85rem', flex: 1 }}
+                                  >
+                                    📄 Guia Interna
+                                  </button>
+                                </div>
+                              </div>
                             ))}
                           </div>
                         </div>
@@ -724,7 +729,7 @@ export default function App() {
           </div>
         )}
 
-        {/* NOVO PRODUTO (CATÁLOGO) */}
+        {/* NOVO PRODUTO */}
         {ecraAtual === 'novo_produto' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Novo Produto</h2>
