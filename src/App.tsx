@@ -15,6 +15,8 @@ import NovoProduto from './pages/NovoProduto';
 import Catalogo from './pages/Catalogo';
 import NovaEncomenda from './pages/NovaEncomenda';
 import EncomendasPendentes from './pages/EncomendasPendentes';
+import EncomendasConcluidas from './pages/EncomendasConcluidas';
+import Relatorio from './pages/Relatorio';
 
 // --- TIPOS DE DADOS ---
 export type Artigo = { id: number; codigo: string; nome: string; preco: number; };
@@ -172,14 +174,6 @@ export default function App() {
 
   const obterOportunidadesPendentes = () => { const ops = encomendas.filter(e => e.estado === 'pendente').map(e => e.op_numero); return Array.from(new Set(ops)); };
 
-  const agruparEncomendasConcluidas = () => {
-    const grupos: Record<string, { op_numero: string; itens: Encomenda[] }> = {};
-    encomendas.filter(e => e.estado === 'concluida').forEach(enc => { if (!grupos[enc.op_numero]) grupos[enc.op_numero] = { op_numero: enc.op_numero, itens: [] }; grupos[enc.op_numero].itens.push(enc); });
-    return Object.values(grupos);
-  };
-
-  const obterLotesDaOP = (op_numero: string) => { const lotes = saidas.filter(s => s.op_numero === op_numero && s.lote_id).map(s => s.lote_id as string); return Array.from(new Set(lotes)); };
-
   const gerarPDF = (grupo: any, comPrecos: boolean) => {
     const doc = new jsPDF();
     doc.setFontSize(18); doc.setTextColor(37, 99, 235); doc.text(`Nota de Expedicao: ${grupo.lote_id}`, 14, 20);
@@ -244,7 +238,6 @@ export default function App() {
           </div>
         )}
 
-        {/* PÁGINAS RENDERIZADAS A PARTIR DOS COMPONENTES */}
         {ecraAtual === 'novo_produto' && (
           <NovoProduto setEcraAtual={setEcraAtual} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} />
         )}
@@ -261,44 +254,15 @@ export default function App() {
           <EncomendasPendentes encomendas={encomendas} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} pedirConfirmacaoApagarEncomenda={pedirConfirmacaoApagarEncomenda} />
         )}
 
-        {/* O RESTO DOS ECRÃS (EXPEDIÇÕES E RELATÓRIO) AINDA VIVEM AQUI */}
-
         {ecraAtual === 'encomendas_concluidas' && (
-          <div style={{ animation: 'fadeIn 0.3s' }}>
-            <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>OPs Concluídas</h2>
-            {encomendas.filter(e => e.estado === 'concluida').length === 0 ? <p style={{ color: 'var(--text-secondary)', textAlign: 'center' }}>Não existem OPs concluídas registadas.</p> : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                {agruparEncomendasConcluidas().map(grupo => {
-                  const lotesAssociados = obterLotesDaOP(grupo.op_numero);
-                  return (
-                    <div key={grupo.op_numero} style={{ backgroundColor: 'var(--surface-color)', border: `1px solid var(--border-color)`, borderRadius: '12px', overflow: 'hidden', opacity: 0.85 }}>
-                      <div style={{ padding: '15px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <strong style={{ fontSize: '1.2rem', color: '#22c55e' }}>✅ {grupo.op_numero}</strong>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Finalizada</span><button onClick={() => pedirConfirmacaoApagarEncomenda(grupo.op_numero)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.2rem', padding: '0 5px' }} title="Apagar OP">🗑️</button></div>
-                      </div>
-                      {lotesAssociados.length > 0 && (
-                        <div style={{ padding: '15px', backgroundColor: 'rgba(255,255,255,0.02)' }}>
-                          <h4 style={{ margin: '0 0 10px 0', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Guias de Expedição Associadas:</h4>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            {lotesAssociados.map(loteId => (
-                              <div key={loteId} style={{ backgroundColor: 'var(--bg-color)', padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                                <div style={{ marginBottom: '10px', fontWeight: 'bold', color: 'var(--primary-color)' }}>📦 {loteId}</div>
-                                <div style={{ display: 'flex', gap: '10px' }}>
-                                  <button onClick={() => { const loteData = agruparSaidas().find(g => g.lote_id === loteId); if (loteData) gerarPDF(loteData, false); }} style={{ ...btnSecondary, padding: '8px', fontSize: '0.85rem', flex: 1 }}>📄 Guia Cliente</button>
-                                  <button onClick={() => { const loteData = agruparSaidas().find(g => g.lote_id === loteId); if (loteData) gerarPDF(loteData, true); }} style={{ ...btnPrimary, padding: '8px', fontSize: '0.85rem', flex: 1 }}>📄 Guia Interna</button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          <EncomendasConcluidas encomendas={encomendas} saidas={saidas} agruparSaidas={agruparSaidas} gerarPDF={gerarPDF} pedirConfirmacaoApagarEncomenda={pedirConfirmacaoApagarEncomenda} />
         )}
+
+        {ecraAtual === 'relatorio' && (
+          <Relatorio saidas={saidas} agruparSaidas={agruparSaidas} gerarPDF={gerarPDF} pedirConfirmacaoApagarLoteInteiro={pedirConfirmacaoApagarLoteInteiro} pedirConfirmacaoApagar={pedirConfirmacaoApagar} />
+        )}
+
+        {/* RESTO DOS ECRÃS (EXPEDIÇÃO: ESCOLHER, RESUMO, SCANNER, FORM) */}
 
         {ecraAtual === 'escolher_expedicao' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
@@ -392,42 +356,6 @@ export default function App() {
             </form>
           </div>
         )}
-
-        {ecraAtual === 'relatorio' && (
-          <div style={{ animation: 'fadeIn 0.3s' }}>
-            <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Histórico Total</h2>
-            <div style={{ background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', padding: '20px', borderRadius: '16px', marginBottom: '25px' }}>
-              <p style={{ color: 'rgba(255,255,255,0.8)', margin: '0 0 5px 0', fontSize: '0.9rem' }}>Faturação Global</p>
-              <h3 style={{ margin: 0, fontSize: '2.5rem', color: 'white' }}>{saidas.reduce((soma, saida) => soma + Number(saida.total_faturado), 0).toFixed(2)}€</h3>
-            </div>
-            {saidas.length === 0 ? <p style={{ color: 'var(--text-secondary)', textAlign: 'center' }}>Nenhum movimento registado.</p> : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                {agruparSaidas().map(grupo => (
-                  <div key={grupo.lote_id} style={{ backgroundColor: 'var(--surface-color)', border: '1px solid var(--border-color)', borderRadius: '12px', overflow: 'hidden' }}>
-                    <div style={{ backgroundColor: 'rgba(255,255,255,0.03)', padding: '15px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div><strong style={{ display: 'block', color: 'var(--primary-color)' }}>{grupo.lote_id.startsWith('Expedição') ? `📦 ${grupo.lote_id}` : '📦 Registo Antigo'}</strong><small style={{ color: 'var(--text-secondary)' }}>{new Date(grupo.data).toLocaleString('pt-PT')}</small></div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}><div style={{ fontWeight: 'bold', fontSize: '1.2rem' }}>{grupo.total_faturado.toFixed(2)}€</div>{grupo.lote_id.startsWith('Expedição') && <button onClick={() => pedirConfirmacaoApagarLoteInteiro(grupo.lote_id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.4rem', padding: '4px' }}>🗑️</button>}</div>
-                    </div>
-                    {grupo.lote_id.startsWith('Expedição') && (
-                      <div style={{ display: 'flex', gap: '10px', padding: '15px 15px 0 15px' }}>
-                        <button onClick={() => gerarPDF(grupo, false)} style={{...btnSecondary, padding: '10px', fontSize: '0.85rem', flex: 1}}>📄 Guia Cliente</button>
-                        <button onClick={() => gerarPDF(grupo, true)} style={{...btnPrimary, padding: '10px', fontSize: '0.85rem', flex: 1}}>📄 Guia Interna</button>
-                      </div>
-                    )}
-                    <div style={{ padding: '15px' }}>
-                      {grupo.itens.map((saida: Saida) => (
-                        <div key={saida.id} style={{ padding: '10px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px dashed rgba(255,255,255,0.1)' }}>
-                          <div><strong style={{ display: 'block', fontSize: '0.95rem' }}>{saida.quantidade}x {saida.artigo_nome}</strong><div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>OP: {saida.op_numero} | Tam: {saida.tamanho}</div></div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ fontSize: '1rem', color: 'var(--text-primary)' }}>{Number(saida.total_faturado).toFixed(2)}€</span><button onClick={() => pedirConfirmacaoApagar(saida.id, 'saida')} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.1rem', padding: '4px' }}>🗑️</button></div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
       </main>
 
       {/* ALERTAS */}
@@ -436,11 +364,6 @@ export default function App() {
       {/* MODAL DE CONFIRMAÇÃO */}
       <ModalConfirmacao aberto={modalConfirmacao.aberto} tipo={modalConfirmacao.tipo} onCancelar={cancelarModal} onConfirmar={executarAcaoModal} />
 
-      <style>{`
-        .loading { display: flex; justify-content: center; align-items: center; height: 100vh; background: var(--bg-color); color: var(--primary-color); }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes modalFadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
-      `}</style>
     </div>
   );
 }
