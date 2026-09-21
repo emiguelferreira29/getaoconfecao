@@ -9,7 +9,17 @@ type Saida = { id: number; artigo_codigo: string; artigo_nome: string; quantidad
 type Ecra = 'home' | 'catalogo' | 'novo_produto' | 'escolher_saida' | 'scanner' | 'formulario_saida' | 'relatorio';
 
 export default function App() {
-  const [ecraAtual, setEcraAtual] = useState<Ecra>('home');
+  // NOVO: Lê o ecrã da memória do navegador, se não existir abre o 'home'
+  const [ecraAtual, setEcraAtual] = useState<Ecra>(() => {
+    const ecraGuardado = localStorage.getItem('ecraAtualConfecao');
+    return (ecraGuardado as Ecra) || 'home';
+  });
+
+  // NOVO: Sempre que o ecrã muda, guarda a posição na memória do navegador
+  useEffect(() => {
+    localStorage.setItem('ecraAtualConfecao', ecraAtual);
+  }, [ecraAtual]);
+
   const [artigos, setArtigos] = useState<Artigo[]>([]);
   const [saidas, setSaidas] = useState<Saida[]>([]);
   const [aCarregar, setACarregar] = useState<boolean>(true);
@@ -32,7 +42,7 @@ export default function App() {
   const [editandoPrecoId, setEditandoPrecoId] = useState<number | null>(null);
   const [precoEditado, setPrecoEditado] = useState<string>('');
 
-  // Estados para o Modal de Confirmação (NOVO)
+  // Estados para o Modal de Confirmação
   const [modalConfirmacao, setModalConfirmacao] = useState<{ aberto: boolean; idParaApagar: number | null }>({ aberto: false, idParaApagar: null });
 
   useEffect(() => {
@@ -410,7 +420,7 @@ export default function App() {
         )}
       </main>
 
-      {/* NOVO: MODAL DE CONFIRMAÇÃO DESENHADO À MEDIDA */}
+      {/* MODAL DE CONFIRMAÇÃO DESENHADO À MEDIDA */}
       {modalConfirmacao.aberto && (
         <div style={modalOverlayStyle}>
           <div style={modalBoxStyle}>
