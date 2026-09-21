@@ -109,18 +109,89 @@ export default function App() {
     return Object.values(grupos).sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
   };
 
-  const gerarPDF = (grupo: any, comPrecos: boolean) => {
+  // HELPER PARA CARREGAR IMAGEM PARA O PDF
+  const carregarImagem = (url: string): Promise<HTMLImageElement> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.src = url;
+      img.onload = () => resolve(img);
+      img.onerror = (err) => reject(err);
+    });
+  };
+
+  // GERAÇÃO DE PDF COM LOGÓTIPO E DATA POR EXTENSO
+  const gerarPDF = async (grupo: any, comPrecos: boolean) => {
     const doc = new jsPDF();
-    doc.setFontSize(18); doc.setTextColor(37, 99, 235); doc.text(`Nota de Expedicao: ${grupo.lote_id}`, 14, 20);
-    doc.setFontSize(11); doc.setTextColor(100); doc.text(`Data e Hora: ${new Date(grupo.data).toLocaleString('pt-PT')}`, 14, 28);
-    if (comPrecos) { doc.setTextColor(220, 38, 38); doc.text('DOCUMENTO INTERNO - COM VALORES', 14, 34); } 
-    else { doc.setTextColor(0); doc.text('DOCUMENTO DE ACOMPANHAMENTO DE MERCADORIA', 14, 34); }
-    const colunas = comPrecos ? ['Referencia / Artigo', 'Ordem Prod. (OP)', 'Tamanho', 'Qtd', 'Total EUR'] : ['Referencia / Artigo', 'Ordem Prod. (OP)', 'Tamanho', 'Qtd'];
-    const linhas = grupo.itens.map((i: Saida) => comPrecos ? [`${i.artigo_codigo} - ${i.artigo_nome}`, i.op_numero, i.tamanho, i.quantidade.toString(), `${Number(i.total_faturado).toFixed(2)}`] : [`${i.artigo_codigo} - ${i.artigo_nome}`, i.op_numero, i.tamanho, i.quantidade.toString()]);
-    autoTable(doc, { startY: 40, head: [colunas], body: linhas, theme: 'grid', headStyles: { fillColor: [37, 99, 235] }, styles: { fontSize: 10, cellPadding: 4 } });
-    const totalQtd = grupo.itens.reduce((acc: number, i: Saida) => acc + i.quantidade, 0); const finalY = (doc as any).lastAutoTable.finalY + 15;
-    doc.setFontSize(12); doc.setTextColor(0); doc.text(`Total de Pecas Expedidas: ${totalQtd} un.`, 14, finalY);
-    if (comPrecos) { doc.setFontSize(14); doc.setTextColor(37, 99, 235); doc.text(`Faturacao Total do Lote: ${grupo.total_faturado.toFixed(2)} EUR`, 14, finalY + 10); }
+
+    // Carregar e desenhar logótipo no topo esquerdo (X: 14, Y: 10, Largura: 22, Altura: 22)
+    try {
+      const logo = await carregarImagem('/logo.png');
+      doc.addImage(logo, 'PNG', 14, 10, 22, 22);
+    } catch (err) {
+      console.warn('Logótipo não carregado no PDF:', err);
+    }
+
+    // Título e detalhes do documento alinhados à direita do logo
+    doc.setFontSize(16);
+    doc.setTextColor(37, 99, 235);
+    doc.text(`Nota de Expedição: ${grupo.lote_id}`, 42, 18);
+
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(`Data e Hora: ${new Date(grupo.data).toLocaleString('pt-PT')}`, 42, 25);
+
+    if (comPrecos) {
+      doc.setTextColor(220, 38, 38);
+      doc.text('DOCUMENTO INTERNO - COM VALORES', 42, 31);
+    } else {
+      doc.setTextColor(0);
+      doc.text('DOCUMENTO DE ACOMPANHAMENTO DE MERCADORIA', 42, 31);
+    }
+
+    const colunas = comPrecos 
+      ? ['Referência / Artigo', 'Ordem Prod. (OP)', 'Tamanho', 'Qtd', 'Total EUR'] 
+      : ['Referência / Artigo', 'Ordem Prod. (OP)', 'Tamanho', 'Qtd'];
+
+    const linhas = grupo.itens.map((i: Saida) => comPrecos 
+      ? [`${i.artigo_codigo} - ${i.artigo_nome}`, i.op_numero, i.tamanho, i.quantidade.toString(), `${Number(i.total_faturado).toFixed(2)} €`] 
+      : [`${i.artigo_codigo} - ${i.artigo_nome}`, i.op_numero, i.tamanho, i.quantidade.toString()]
+    );
+
+    autoTable(doc, { 
+      startY: 38, 
+      head: [colunas], 
+      body: linhas, 
+      theme: 'grid', 
+      headStyles: { fillColor: [37, 99, 235] }, 
+      styles: { fontSize: 10, cellPadding: 4 } 
+    });
+
+    const totalQtd = grupo.itens.reduce((acc: number, i: Saida) => acc + i.quantidade, 0);
+    let finalY = (doc as any).lastAutoTable.finalY + 12;
+
+    doc.setFontSize(11);
+    doc.setTextColor(0);
+    doc.text(`Total de Peças Expedidas: ${totalQtd} un.`, 14, finalY);
+
+    if (comPrecos) {
+      finalY += 7;
+      doc.setFontSize(12);
+      doc.setTextColor(37, 99, 235);
+      doc.text(`Faturação Total do Lote: ${grupo.total_faturado.toFixed(2)} EUR`, 14, finalY);
+    }
+
+    // Data por extenso no final do documento
+    finalY += 15;
+    const dataExtenso = new Date(grupo.data).toLocaleDateString('pt-PT', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+
+    doc.setFontSize(10);
+    doc.setTextColor(120);
+    doc.text(`Documento emitido a ${dataExtenso}.`, 14, finalY);
+
     doc.save(`${grupo.lote_id}${comPrecos ? '_INTERNO' : '_CLIENTE'}.pdf`);
   };
 
