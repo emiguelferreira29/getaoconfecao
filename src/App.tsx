@@ -5,7 +5,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import './index.css';
 
-// COMPONENTES IMPORTADOS
+// COMPONENTES E MODAIS
 import Login from './components/Login';
 import { ModalAlerta, ModalConfirmacao, btnPrimary, btnSecondary, btnCard, inputStyle, labelStyle } from './components/Modais';
 import type { TipoModalConfirmacao } from './components/Modais';
@@ -13,13 +13,14 @@ import type { TipoModalConfirmacao } from './components/Modais';
 // PÁGINAS IMPORTADAS
 import NovoProduto from './pages/NovoProduto';
 import Catalogo from './pages/Catalogo';
+import NovaEncomenda from './pages/NovaEncomenda';
+import EncomendasPendentes from './pages/EncomendasPendentes';
 
 // --- TIPOS DE DADOS ---
 export type Artigo = { id: number; codigo: string; nome: string; preco: number; };
-type Saida = { id: number; artigo_codigo: string; artigo_nome: string; quantidade: number; total_faturado: number; data: string; op_numero: string; tamanho: string; lote_id: string | null; };
-type ItemExpedicao = { artigo_codigo: string; artigo_nome: string; quantidade: number; total_faturado: number; op_numero: string; tamanho: string; };
-type Encomenda = { id: number; op_numero: string; artigo_codigo: string; artigo_nome: string; quantidade_pedida: number; estado: string; data_entrega?: string | null; };
-type ItemNovaOp = { artigo: Artigo; quantidade: number; };
+export type Saida = { id: number; artigo_codigo: string; artigo_nome: string; quantidade: number; total_faturado: number; data: string; op_numero: string; tamanho: string; lote_id: string | null; };
+export type ItemExpedicao = { artigo_codigo: string; artigo_nome: string; quantidade: number; total_faturado: number; op_numero: string; tamanho: string; };
+export type Encomenda = { id: number; op_numero: string; artigo_codigo: string; artigo_nome: string; quantidade_pedida: number; estado: string; data_entrega?: string | null; };
 export type Ecra = 'home' | 'catalogo' | 'novo_produto' | 'resumo_expedicao' | 'scanner' | 'formulario_saida' | 'relatorio' | 'nova_encomenda' | 'escolher_expedicao' | 'encomendas_pendentes' | 'encomendas_concluidas';
 
 export default function App() {
@@ -37,18 +38,6 @@ export default function App() {
   const [modoExpedicao, setModoExpedicao] = useState<'livre' | 'op' | null>(null);
   const [opSelecionada, setOpSelecionada] = useState<string>('');
   const [listaExpedicao, setListaExpedicao] = useState<ItemExpedicao[]>([]);
-  
-  // Estados Nova OP
-  const [novaOpNumero, setNovaOpNumero] = useState('');
-  const [novaOpDataEntrega, setNovaOpDataEntrega] = useState('');
-  const [novaOpLista, setNovaOpLista] = useState<ItemNovaOp[]>([]);
-  const [novaOpArtigo, setNovaOpArtigo] = useState<Artigo | null>(null);
-  const [novaOpQtd, setNovaOpQtd] = useState('');
-
-  // Estados Edição de OP Pendente
-  const [editandoOpId, setEditandoOpId] = useState<string | null>(null);
-  const [editOpData, setEditOpData] = useState<string>('');
-  const [editOpQuantidades, setEditOpQuantidades] = useState<Record<number, number>>({});
 
   // Estados Formulario Saida
   const [modoSaida, setModoSaida] = useState<'scanner' | 'manual' | null>(null);
@@ -95,45 +84,6 @@ export default function App() {
     if (ecraAtual === 'resumo_expedicao') { pedirConfirmacaoCancelarLote(); } 
     else if (ecraAtual === 'scanner' || ecraAtual === 'formulario_saida') { setEcraAtual('resumo_expedicao'); } 
     else { setEcraAtual('home'); }
-  };
-
-  // MÉTODOS NOVA OP
-  const adicionarItemNovaOp = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!novaOpArtigo) return mostrarAlerta('Atenção', 'Selecione um artigo.', 'aviso');
-    const qtd = parseInt(novaOpQtd);
-    if (isNaN(qtd) || qtd <= 0) return mostrarAlerta('Atenção', 'Quantidade inválida.', 'aviso');
-    setNovaOpLista([...novaOpLista, { artigo: novaOpArtigo, quantidade: qtd }]);
-    setNovaOpArtigo(null); setNovaOpQtd('');
-  };
-
-  const guardarNovaEncomenda = async () => {
-    if (!novaOpNumero) return mostrarAlerta('Atenção', 'Indique o número da OP.', 'aviso');
-    if (novaOpLista.length === 0) return mostrarAlerta('Atenção', 'Adicione pelo menos um artigo à OP.', 'aviso');
-    const dadosParaInserir = novaOpLista.map(item => ({ op_numero: novaOpNumero, artigo_codigo: item.artigo.codigo, artigo_nome: item.artigo.nome, quantidade_pedida: item.quantidade, data_entrega: novaOpDataEntrega ? novaOpDataEntrega : null }));
-    const { error } = await supabase.from('encomendas').insert(dadosParaInserir);
-    if (error) mostrarAlerta('Erro', error.message, 'erro');
-    else { mostrarAlerta('Sucesso', `A ${novaOpNumero} foi registada com sucesso!`, 'sucesso'); setNovaOpNumero(''); setNovaOpDataEntrega(''); setNovaOpLista([]); carregarDados(); setEcraAtual('home'); }
-  };
-
-  // MÉTODOS EDIÇÃO OP
-  const iniciarEdicaoOp = (grupo: any) => {
-    setEditandoOpId(grupo.op_numero); setEditOpData(grupo.data_entrega || '');
-    const qtds: Record<number, number> = {};
-    grupo.itens.forEach((item: Encomenda) => { qtds[item.id] = item.quantidade_pedida; });
-    setEditOpQuantidades(qtds);
-  };
-
-  const guardarEdicaoOp = async (op_numero: string) => {
-    try {
-      const itensParaAtualizar = Object.keys(editOpQuantidades);
-      for (const idStr of itensParaAtualizar) {
-        const id = parseInt(idStr); const qtd = editOpQuantidades[id];
-        const { error } = await supabase.from('encomendas').update({ quantidade_pedida: qtd, data_entrega: editOpData ? editOpData : null }).eq('id', id);
-        if (error) throw error;
-      }
-      mostrarAlerta('Sucesso', `A ${op_numero} foi atualizada!`, 'sucesso'); setEditandoOpId(null); carregarDados();
-    } catch (err: any) { mostrarAlerta('Erro ao atualizar', err.message, 'erro'); }
   };
 
   // EXPEDIÇÃO
@@ -191,7 +141,7 @@ export default function App() {
     setListaExpedicao([]); setFormOP(''); setFormTamanho(''); carregarDados(); setEcraAtual('home');
   };
 
-  // MÉTODOS MODAIS E DADOS
+  // MÉTODOS DE MODAIS E DADOS
   const pedirConfirmacaoApagar = (id: number, tipo: 'saida' | 'artigo') => { setModalConfirmacao({ aberto: true, tipo, idParaApagar: id }); };
   const pedirConfirmacaoApagarLoteInteiro = (lote_id: string) => { setModalConfirmacao({ aberto: true, tipo: 'lote_inteiro', idParaApagar: lote_id }); };
   const pedirConfirmacaoApagarEncomenda = (op_numero: string) => { setModalConfirmacao({ aberto: true, tipo: 'encomenda_inteira', idParaApagar: op_numero }); };
@@ -222,12 +172,6 @@ export default function App() {
 
   const obterOportunidadesPendentes = () => { const ops = encomendas.filter(e => e.estado === 'pendente').map(e => e.op_numero); return Array.from(new Set(ops)); };
 
-  const agruparEncomendasPendentes = () => {
-    const grupos: Record<string, { op_numero: string; data_entrega: string | null; itens: Encomenda[] }> = {};
-    encomendas.filter(e => e.estado === 'pendente').forEach(enc => { if (!grupos[enc.op_numero]) grupos[enc.op_numero] = { op_numero: enc.op_numero, data_entrega: enc.data_entrega || null, itens: [] }; grupos[enc.op_numero].itens.push(enc); });
-    return Object.values(grupos).sort((a, b) => { const dataA = a.data_entrega ? new Date(a.data_entrega).getTime() : Infinity; const dataB = b.data_entrega ? new Date(b.data_entrega).getTime() : Infinity; return dataA - dataB; });
-  };
-
   const agruparEncomendasConcluidas = () => {
     const grupos: Record<string, { op_numero: string; itens: Encomenda[] }> = {};
     encomendas.filter(e => e.estado === 'concluida').forEach(enc => { if (!grupos[enc.op_numero]) grupos[enc.op_numero] = { op_numero: enc.op_numero, itens: [] }; grupos[enc.op_numero].itens.push(enc); });
@@ -235,15 +179,6 @@ export default function App() {
   };
 
   const obterLotesDaOP = (op_numero: string) => { const lotes = saidas.filter(s => s.op_numero === op_numero && s.lote_id).map(s => s.lote_id as string); return Array.from(new Set(lotes)); };
-
-  const calcularStatusData = (dataStr: string | null) => {
-    if (!dataStr) return { corBorda: 'var(--border-color)', icone: '📅', texto: 'Sem prazo definido' };
-    const dataEntrega = new Date(dataStr); const hoje = new Date(); dataEntrega.setHours(0,0,0,0); hoje.setHours(0,0,0,0);
-    const diffTime = dataEntrega.getTime() - hoje.getTime(); const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    if (diffDays < 0) return { corBorda: '#ef4444', icone: '🔴', texto: `Atrasada (${Math.abs(diffDays)} dias)` };
-    if (diffDays <= 5) return { corBorda: '#eab308', icone: '🟡', texto: `Atenção: Falta(m) ${diffDays} dia(s)` };
-    return { corBorda: '#22c55e', icone: '🟢', texto: `No prazo (${new Date(dataStr).toLocaleDateString('pt-PT')})` };
-  };
 
   const gerarPDF = (grupo: any, comPrecos: boolean) => {
     const doc = new jsPDF();
@@ -318,57 +253,15 @@ export default function App() {
           <Catalogo artigos={artigos} carregarDados={carregarDados} pedirConfirmacaoApagar={pedirConfirmacaoApagar} />
         )}
 
-        {/* O RESTO DOS ECRÃS */}
-        {ecraAtual === 'encomendas_pendentes' && (
-          <div style={{ animation: 'fadeIn 0.3s' }}>
-            <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Encomendas por Entregar</h2>
-            {encomendas.filter(e => e.estado === 'pendente').length === 0 ? <p style={{ color: 'var(--text-secondary)', textAlign: 'center' }}>Não existem encomendas pendentes.</p> : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                {agruparEncomendasPendentes().map(grupo => {
-                  const status = calcularStatusData(grupo.data_entrega);
-                  return (
-                    <div key={grupo.op_numero} style={{ backgroundColor: 'var(--surface-color)', border: `2px solid ${status.corBorda}`, borderRadius: '12px', overflow: 'hidden' }}>
-                      <div style={{ padding: '15px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.02)' }}>
-                        <strong style={{ fontSize: '1.2rem' }}>{grupo.op_numero}</strong>
-                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                          <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{status.icone} {status.texto}</div>
-                          {editandoOpId !== grupo.op_numero && (
-                            <>
-                              <button onClick={() => iniciarEdicaoOp(grupo)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '0 5px' }} title="Editar OP">✏️</button>
-                              <button onClick={() => pedirConfirmacaoApagarEncomenda(grupo.op_numero)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.2rem', padding: '0 5px' }} title="Apagar OP">🗑️</button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      <div style={{ padding: '15px' }}>
-                        {editandoOpId === grupo.op_numero ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', animation: 'fadeIn 0.2s' }}>
-                            <div><label style={{...labelStyle, fontSize: '0.85rem'}}>Nova Data de Entrega:</label><input type="date" value={editOpData} onChange={e => setEditOpData(e.target.value)} style={{...inputStyle, padding: '8px'}} /></div>
-                            <div>
-                              <label style={{...labelStyle, fontSize: '0.85rem'}}>Ajustar Quantidades (Faltam entregar):</label>
-                              {grupo.itens.map(item => (
-                                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px dashed rgba(255,255,255,0.05)' }}>
-                                  <span style={{ fontSize: '0.95rem' }}>{item.artigo_nome}</span>
-                                  <input type="number" min="1" value={editOpQuantidades[item.id] || ''} onChange={e => setEditOpQuantidades({...editOpQuantidades, [item.id]: parseInt(e.target.value) || 0})} style={{...inputStyle, width: '90px', padding: '6px', textAlign: 'center'}} />
-                                </div>
-                              ))}
-                            </div>
-                            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                              <button onClick={() => setEditandoOpId(null)} style={{...btnSecondary, padding: '10px', flex: 1}}>Cancelar</button>
-                              <button onClick={() => guardarEdicaoOp(grupo.op_numero)} style={{...btnPrimary, backgroundColor: '#22c55e', padding: '10px', flex: 1}}>Guardar</button>
-                            </div>
-                          </div>
-                        ) : (
-                          <><h4 style={{ margin: '0 0 10px 0', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Falta produzir/entregar:</h4>{grupo.itens.map(item => <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px dashed rgba(255,255,255,0.05)' }}><span>{item.artigo_nome}</span><strong style={{ color: 'var(--primary-color)' }}>{item.quantidade_pedida} un.</strong></div>)}</>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+        {ecraAtual === 'nova_encomenda' && (
+          <NovaEncomenda artigos={artigos} setEcraAtual={setEcraAtual} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} />
         )}
+
+        {ecraAtual === 'encomendas_pendentes' && (
+          <EncomendasPendentes encomendas={encomendas} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} pedirConfirmacaoApagarEncomenda={pedirConfirmacaoApagarEncomenda} />
+        )}
+
+        {/* O RESTO DOS ECRÃS (EXPEDIÇÕES E RELATÓRIO) AINDA VIVEM AQUI */}
 
         {ecraAtual === 'encomendas_concluidas' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
@@ -404,30 +297,6 @@ export default function App() {
                 })}
               </div>
             )}
-          </div>
-        )}
-
-        {ecraAtual === 'nova_encomenda' && (
-          <div style={{ animation: 'fadeIn 0.3s' }}>
-            <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Nova Encomenda (Entrada)</h2>
-            <div style={{ marginBottom: '15px' }}><label style={labelStyle}>Número da OP (ex: OP-001)</label><input type="text" value={novaOpNumero} onChange={e => setNovaOpNumero(e.target.value)} required style={inputStyle} /></div>
-            <div style={{ marginBottom: '25px' }}><label style={labelStyle}>Data de Entrega (Opcional)</label><input type="date" value={novaOpDataEntrega} onChange={e => setNovaOpDataEntrega(e.target.value)} style={inputStyle} /></div>
-            <div style={{ backgroundColor: 'var(--surface-color)', padding: '15px', borderRadius: '12px', marginBottom: '20px' }}>
-              <h3 style={{ fontSize: '1.1rem', marginBottom: '15px' }}>Adicionar Material à OP</h3>
-              <form onSubmit={adicionarItemNovaOp} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <select value={novaOpArtigo?.id || ''} onChange={e => setNovaOpArtigo(artigos.find(a => a.id === parseInt(e.target.value)) || null)} required style={inputStyle}>
-                  <option value="" disabled>Escolha o artigo...</option>{artigos.map(a => <option key={a.id} value={a.id}>{a.codigo} - {a.nome}</option>)}
-                </select>
-                <div style={{ display: 'flex', gap: '10px' }}><input type="number" min="1" placeholder="Quantidade" value={novaOpQtd} onChange={e => setNovaOpQtd(e.target.value)} required style={{...inputStyle, flex: 1}} /><button type="submit" style={{...btnPrimary, width: 'auto', padding: '0 20px'}}>Adicionar</button></div>
-              </form>
-            </div>
-            <h3 style={{ fontSize: '1.1rem', marginBottom: '10px' }}>Lista da OP ({novaOpLista.length})</h3>
-            {novaOpLista.map((item, i) => (
-              <div key={i} style={{ backgroundColor: 'var(--surface-color)', padding: '12px', borderRadius: '8px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
-                <span>{item.quantidade}x {item.artigo.nome}</span><button onClick={() => setNovaOpLista(novaOpLista.filter((_, index) => index !== i))} style={{ background: 'none', border: 'none', color: '#ef4444' }}>✕</button>
-              </div>
-            ))}
-            {novaOpLista.length > 0 && <button onClick={guardarNovaEncomenda} style={{...btnPrimary, marginTop: '20px', backgroundColor: '#8b5cf6'}}>💾 Guardar OP Completa</button>}
           </div>
         )}
 
