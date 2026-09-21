@@ -28,6 +28,11 @@ export default function App() {
   const [novoNome, setNovoNome] = useState('');
   const [novoPreco, setNovoPreco] = useState('');
 
+  // CORREÇÃO: Isto é o que diz à aplicação para carregar os dados mal abre
+  useEffect(() => {
+    carregarDados();
+  }, []);
+
   async function carregarDados() {
     setACarregar(true);
     
