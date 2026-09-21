@@ -26,7 +26,6 @@ export type Encomenda = { id: number; op_numero: string; artigo_codigo: string; 
 export type Ecra = 'home' | 'catalogo' | 'novo_produto' | 'resumo_expedicao' | 'scanner' | 'formulario_saida' | 'relatorio' | 'nova_encomenda' | 'escolher_expedicao' | 'encomendas_pendentes' | 'encomendas_concluidas';
 
 export default function App() {
-  // Alterado de localStorage para sessionStorage para limpar a sessão ao fechar a App/Navegador
   const [autenticado, setAutenticado] = useState<boolean>(() => sessionStorage.getItem('autenticadoConfecao') === 'true');
   const [ecraAtual, setEcraAtual] = useState<Ecra>(() => (sessionStorage.getItem('ecraAtualConfecao') as Ecra) || 'home');
 
@@ -118,12 +117,24 @@ export default function App() {
     return Object.values(grupos).sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
   };
 
-  const carregarImagem = (url: string): Promise<HTMLImageElement> => {
-    return new Promise((resolve, reject) => {
+  const carregarImagemBase64 = (url: string): Promise<string> => {
+    return new Promise((resolve) => {
       const img = new Image();
+      img.crossOrigin = 'Anonymous';
       img.src = url;
-      img.onload = () => resolve(img);
-      img.onerror = (err) => reject(err);
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          resolve(canvas.toDataURL('image/png'));
+        } else {
+          resolve('');
+        }
+      };
+      img.onerror = () => resolve('');
     });
   };
 
@@ -131,26 +142,30 @@ export default function App() {
     const doc = new jsPDF();
 
     try {
-      const logo = await carregarImagem('/logo.png');
-      doc.addImage(logo, 'PNG', 14, 10, 22, 22);
+      const logoBase64 = await carregarImagemBase64('/logo.png');
+      if (logoBase64) {
+        doc.addImage(logoBase64, 'PNG', 14, 10, 22, 22);
+      }
     } catch (err) {
-      console.warn('Logótipo não carregado no PDF:', err);
+      console.warn('Erro ao carregar logótipo no PDF:', err);
     }
 
     doc.setFontSize(16);
     doc.setTextColor(37, 99, 235);
-    doc.text(`Nota de Expedição: ${grupo.lote_id}`, 42, 18);
+    doc.text(`Nota de Expedição: ${grupo.lote_id}`, 40, 18);
+
+    const dataLote = grupo.data ? new Date(grupo.data) : new Date();
 
     doc.setFontSize(10);
     doc.setTextColor(100);
-    doc.text(`Data e Hora: ${new Date(grupo.data).toLocaleString('pt-PT')}`, 42, 25);
+    doc.text(`Data e Hora: ${dataLote.toLocaleString('pt-PT')}`, 40, 25);
 
     if (comPrecos) {
       doc.setTextColor(220, 38, 38);
-      doc.text('DOCUMENTO INTERNO - COM VALORES', 42, 31);
+      doc.text('DOCUMENTO INTERNO - COM VALORES', 40, 31);
     } else {
       doc.setTextColor(0);
-      doc.text('DOCUMENTO DE ACOMPANHAMENTO DE MERCADORIA', 42, 31);
+      doc.text('DOCUMENTO DE ACOMPANHAMENTO DE MERCADORIA', 40, 31);
     }
 
     const colunas = comPrecos 
@@ -158,8 +173,8 @@ export default function App() {
       : ['Referência / Artigo', 'Ordem Prod. (OP)', 'Tamanho', 'Qtd'];
 
     const linhas = grupo.itens.map((i: Saida) => comPrecos 
-      ? [`${i.artigo_codigo} - ${i.artigo_nome}`, i.op_numero, i.tamanho, i.quantidade.toString(), `${Number(i.total_faturado).toFixed(2)} €`] 
-      : [`${i.artigo_codigo} - ${i.artigo_nome}`, i.op_numero, i.tamanho, i.quantidade.toString()]
+      ? [`${i.artigo_codigo} - ${i.artigo_nome}`, i.op_numero, i.tamanho || '---', i.quantidade.toString(), `${Number(i.total_faturado).toFixed(2)} €`] 
+      : [`${i.artigo_codigo} - ${i.artigo_nome}`, i.op_numero, i.tamanho || '---', i.quantidade.toString()]
     );
 
     autoTable(doc, { 
@@ -171,7 +186,7 @@ export default function App() {
       styles: { fontSize: 10, cellPadding: 4 } 
     });
 
-    const totalQtd = grupo.itens.reduce((acc: number, i: Saida) => acc + i.quantidade, 0);
+    const totalQtd = grupo.itens.reduce((acc: number, i: Saida) => acc + Number(i.quantidade), 0);
     let finalY = (doc as any).lastAutoTable.finalY + 12;
 
     doc.setFontSize(11);
@@ -182,18 +197,18 @@ export default function App() {
       finalY += 7;
       doc.setFontSize(12);
       doc.setTextColor(37, 99, 235);
-      doc.text(`Faturação Total do Lote: ${grupo.total_faturado.toFixed(2)} EUR`, 14, finalY);
+      doc.text(`Faturação Total do Lote: ${Number(grupo.total_faturado).toFixed(2)} EUR`, 14, finalY);
     }
 
     finalY += 15;
-    const dataExtenso = new Date(grupo.data).toLocaleDateString('pt-PT', {
+    const dataExtenso = dataLote.toLocaleDateString('pt-PT', {
       day: 'numeric',
       month: 'long',
       year: 'numeric'
     });
 
     doc.setFontSize(10);
-    doc.setTextColor(120);
+    doc.setTextColor(100);
     doc.text(`Documento emitido a ${dataExtenso}.`, 14, finalY);
 
     doc.save(`${grupo.lote_id}${comPrecos ? '_INTERNO' : '_CLIENTE'}.pdf`);

@@ -36,6 +36,17 @@ export default function Expedicao({
     return Array.from(new Set(ops));
   };
 
+  const obterQtdFaltanteItem = (artigoCodigo: string) => {
+    if (modoExpedicao !== 'op' || !opSelecionada) return null;
+    const enc = encomendas.find(e => e.op_numero === opSelecionada && e.artigo_codigo === artigoCodigo);
+    if (!enc) return null;
+    const qtdLida = listaExpedicao
+      .filter(l => l.artigo_codigo === artigoCodigo)
+      .reduce((sum, curr) => sum + curr.quantidade, 0);
+    const falta = enc.quantidade_pedida - qtdLida;
+    return falta > 0 ? falta : 0;
+  };
+
   const iniciarExpedicaoLivre = () => {
     setModoExpedicao('livre'); setOpSelecionada(''); setListaExpedicao([]); setFormOP(''); setEcraAtual('resumo_expedicao');
   };
@@ -45,13 +56,61 @@ export default function Expedicao({
     setModoExpedicao('op'); setListaExpedicao([]); setFormOP(opSelecionada); setEcraAtual('resumo_expedicao');
   };
 
+  const prepararInsercaoManual = () => {
+    setModoSaida('manual');
+    if (modoExpedicao === 'op' && opSelecionada) {
+      const pendentesOp = encomendas.filter(e => e.op_numero === opSelecionada);
+      const itemPendente = pendentesOp.find(enc => {
+        const qtdLida = listaExpedicao
+          .filter(l => l.artigo_codigo === enc.artigo_codigo)
+          .reduce((sum, curr) => sum + curr.quantidade, 0);
+        return enc.quantidade_pedida - qtdLida > 0;
+      });
+
+      if (itemPendente) {
+        const art = artigos.find(a => a.codigo === itemPendente.artigo_codigo);
+        if (art) {
+          setArtigoSelecionado(art);
+          const falta = obterQtdFaltanteItem(art.codigo);
+          setFormQtd(falta !== null && falta > 0 ? falta.toString() : '');
+        } else {
+          setArtigoSelecionado(null);
+          setFormQtd('');
+        }
+      } else {
+        setArtigoSelecionado(null);
+        setFormQtd('');
+      }
+    } else {
+      setArtigoSelecionado(null);
+      setFormQtd('');
+    }
+    setEcraAtual('formulario_saida');
+  };
+
+  const selecionarArtigoManual = (idArtigo: number) => {
+    const art = artigos.find(a => a.id === idArtigo) || null;
+    setArtigoSelecionado(art);
+    if (art && modoExpedicao === 'op' && opSelecionada) {
+      const falta = obterQtdFaltanteItem(art.codigo);
+      if (falta !== null && falta > 0) {
+        setFormQtd(falta.toString());
+      }
+    }
+  };
+
   const processarLeituraScanner = (codigosLidos: any[]) => {
     if (codigosLidos.length === 0 || pausarCamara) return;
     const codigoQR = codigosLidos[0].rawValue; 
     setPausarCamara(true);
     const artigo = artigos.find(a => a.codigo === codigoQR);
     if (artigo) { 
-      setArtigoSelecionado(artigo); setEcraAtual('formulario_saida'); 
+      setArtigoSelecionado(artigo); 
+      if (modoExpedicao === 'op' && opSelecionada) {
+        const falta = obterQtdFaltanteItem(artigo.codigo);
+        if (falta !== null && falta > 0) setFormQtd(falta.toString());
+      }
+      setEcraAtual('formulario_saida'); 
     } else { 
       mostrarAlerta('Artigo não encontrado', `Código "${codigoQR}" não existe.`, 'aviso'); 
       setTimeout(() => setPausarCamara(false), 2000); 
@@ -149,7 +208,7 @@ export default function Expedicao({
         <h2 style={{ fontSize: '1.5rem', marginBottom: '10px' }}>{modoExpedicao === 'op' ? `Lote de Expedição (${opSelecionada})` : 'Lote de Expedição Livre'}</h2>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '25px' }}>
           <button onClick={() => { setModoSaida('scanner'); setPausarCamara(false); setEcraAtual('scanner'); }} style={{...btnSecondary, borderStyle: 'dashed'}}>📷 Picar Código</button>
-          <button onClick={() => { setModoSaida('manual'); setArtigoSelecionado(null); setEcraAtual('formulario_saida'); }} style={{...btnSecondary, borderStyle: 'dashed'}}>✍️ Inserir Manual</button>
+          <button onClick={prepararInsercaoManual} style={{...btnSecondary, borderStyle: 'dashed'}}>✍️ Inserir Manual</button>
         </div>
         {modoExpedicao === 'op' && (
           <div style={{ backgroundColor: 'var(--surface-color)', padding: '15px', borderRadius: '12px', marginBottom: '25px', border: '1px solid var(--border-color)' }}>
@@ -206,9 +265,12 @@ export default function Expedicao({
         <form onSubmit={adicionarAoLote} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
           <div>
             <label style={labelStyle}>Artigo</label>
-            {modoSaida === 'scanner' && artigoSelecionado ? <div style={{ padding: '12px', backgroundColor: 'var(--surface-color)', borderRadius: '8px', border: '1px solid var(--primary-color)', color: 'white' }}>{artigoSelecionado.codigo} - {artigoSelecionado.nome}</div> : (
-              <select value={artigoSelecionado?.id || ''} onChange={e => setArtigoSelecionado(artigos.find(a => a.id === parseInt(e.target.value)) || null)} required style={inputStyle}>
-                <option value="" disabled>Selecione um artigo...</option>{artigos.map(a => <option key={a.id} value={a.id}>{a.codigo} - {a.nome}</option>)}
+            {modoSaida === 'scanner' && artigoSelecionado ? (
+              <div style={{ padding: '12px', backgroundColor: 'var(--surface-color)', borderRadius: '8px', border: '1px solid var(--primary-color)', color: 'white' }}>{artigoSelecionado.codigo} - {artigoSelecionado.nome}</div>
+            ) : (
+              <select value={artigoSelecionado?.id || ''} onChange={e => selecionarArtigoManual(parseInt(e.target.value))} required style={inputStyle}>
+                <option value="" disabled>Selecione um artigo...</option>
+                {artigos.map(a => <option key={a.id} value={a.id}>{a.codigo} - {a.nome}</option>)}
               </select>
             )}
           </div>
