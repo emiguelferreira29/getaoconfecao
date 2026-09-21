@@ -9,9 +9,9 @@ import './index.css';
 type Artigo = { id: number; codigo: string; nome: string; preco: number; };
 type Saida = { id: number; artigo_codigo: string; artigo_nome: string; quantidade: number; total_faturado: number; data: string; op_numero: string; tamanho: string; lote_id: string | null; };
 type ItemExpedicao = { artigo_codigo: string; artigo_nome: string; quantidade: number; total_faturado: number; op_numero: string; tamanho: string; };
-type Encomenda = { id: number; op_numero: string; artigo_codigo: string; artigo_nome: string; quantidade_pedida: number; estado: string; };
+type Encomenda = { id: number; op_numero: string; artigo_codigo: string; artigo_nome: string; quantidade_pedida: number; estado: string; data_entrega?: string | null; };
 type ItemNovaOp = { artigo: Artigo; quantidade: number; };
-type Ecra = 'home' | 'catalogo' | 'novo_produto' | 'resumo_expedicao' | 'scanner' | 'formulario_saida' | 'relatorio' | 'nova_encomenda' | 'escolher_expedicao';
+type Ecra = 'home' | 'catalogo' | 'novo_produto' | 'resumo_expedicao' | 'scanner' | 'formulario_saida' | 'relatorio' | 'nova_encomenda' | 'escolher_expedicao' | 'encomendas_pendentes';
 
 export default function App() {
   const [autenticado, setAutenticado] = useState<boolean>(() => localStorage.getItem('autenticadoConfecao') === 'true');
@@ -33,6 +33,7 @@ export default function App() {
   
   // Estados para nova OP (Entrada)
   const [novaOpNumero, setNovaOpNumero] = useState('');
+  const [novaOpDataEntrega, setNovaOpDataEntrega] = useState('');
   const [novaOpLista, setNovaOpLista] = useState<ItemNovaOp[]>([]);
   const [novaOpArtigo, setNovaOpArtigo] = useState<Artigo | null>(null);
   const [novaOpQtd, setNovaOpQtd] = useState('');
@@ -102,14 +103,15 @@ export default function App() {
       op_numero: novaOpNumero,
       artigo_codigo: item.artigo.codigo,
       artigo_nome: item.artigo.nome,
-      quantidade_pedida: item.quantidade
+      quantidade_pedida: item.quantidade,
+      data_entrega: novaOpDataEntrega ? novaOpDataEntrega : null // Grava a data se existir
     }));
 
     const { error } = await supabase.from('encomendas').insert(dadosParaInserir);
     if (error) mostrarAlerta('Erro', error.message, 'erro');
     else {
       mostrarAlerta('Sucesso', `A ${novaOpNumero} foi registada com sucesso!`, 'sucesso');
-      setNovaOpNumero(''); setNovaOpLista([]); carregarDados(); setEcraAtual('home');
+      setNovaOpNumero(''); setNovaOpDataEntrega(''); setNovaOpLista([]); carregarDados(); setEcraAtual('home');
     }
   };
 
@@ -129,7 +131,7 @@ export default function App() {
     if (!error) { setEditandoPrecoId(null); carregarDados(); }
   };
 
-  // --- LÓGICA DE EXPEDIÇÃO (NOVA) ---
+  // --- LÓGICA DE EXPEDIÇÃO ---
   const iniciarExpedicaoLivre = () => {
     setModoExpedicao('livre'); setOpSelecionada(''); setListaExpedicao([]); setFormOP(''); setEcraAtual('resumo_expedicao');
   };
@@ -158,15 +160,12 @@ export default function App() {
     const qtdNum = parseInt(formQtd);
     if (isNaN(qtdNum) || qtdNum <= 0) return;
     
-    // Se for modo OP, obriga a que a OP enviada seja a selecionada
     const opAUsar = modoExpedicao === 'op' ? opSelecionada : formOP;
-
     const novoItem: ItemExpedicao = {
       artigo_codigo: artigoSelecionado.codigo, artigo_nome: artigoSelecionado.nome,
       quantidade: qtdNum, total_faturado: qtdNum * artigoSelecionado.preco,
       op_numero: opAUsar, tamanho: formTamanho
     };
-
     setListaExpedicao([...listaExpedicao, novoItem]);
     setFormQtd(''); setArtigoSelecionado(null); setEcraAtual('resumo_expedicao');
   };
@@ -196,19 +195,14 @@ export default function App() {
 
     if (error) return mostrarAlerta('Erro', error.message, 'erro');
 
-    // DESCONTO AUTOMÁTICO NA ENCOMENDA
     if (modoExpedicao === 'op' && opSelecionada) {
       const itensDaOp = encomendas.filter(e => e.op_numero === opSelecionada);
       for (const enc of itensDaOp) {
-        // Quanto é que enviámos agora deste artigo especificamente?
         const qtdEnviada = listaExpedicao.filter(l => l.artigo_codigo === enc.artigo_codigo).reduce((sum, curr) => sum + curr.quantidade, 0);
         if (qtdEnviada > 0) {
           const novaQtd = enc.quantidade_pedida - qtdEnviada;
-          if (novaQtd <= 0) {
-            await supabase.from('encomendas').update({ estado: 'concluida', quantidade_pedida: 0 }).eq('id', enc.id);
-          } else {
-            await supabase.from('encomendas').update({ quantidade_pedida: novaQtd }).eq('id', enc.id);
-          }
+          if (novaQtd <= 0) await supabase.from('encomendas').update({ estado: 'concluida', quantidade_pedida: 0 }).eq('id', enc.id);
+          else await supabase.from('encomendas').update({ quantidade_pedida: novaQtd }).eq('id', enc.id);
         }
       }
     }
@@ -221,28 +215,18 @@ export default function App() {
   // --- MÉTODOS DE RELATÓRIO E MODAIS ---
   const pedirConfirmacaoApagar = (id: number, tipo: 'saida' | 'artigo') => { setModalConfirmacao({ aberto: true, tipo, idParaApagar: id }); };
   const pedirConfirmacaoApagarLoteInteiro = (lote_id: string) => { setModalConfirmacao({ aberto: true, tipo: 'lote_inteiro', idParaApagar: lote_id }); };
-  
   const pedirConfirmacaoCancelarLote = () => {
-    if (listaExpedicao.length > 0) setModalConfirmacao({ aberto: true, tipo: 'cancelar_lote', idParaApagar: null });
-    else setEcraAtual('home');
+    if (listaExpedicao.length > 0) setModalConfirmacao({ aberto: true, tipo: 'cancelar_lote', idParaApagar: null }); else setEcraAtual('home');
   };
-  
   const cancelarModal = () => setModalConfirmacao({ aberto: false, tipo: null, idParaApagar: null });
 
   const executarAcaoModal = async () => {
     const { idParaApagar, tipo } = modalConfirmacao;
     if (!tipo) return;
-    
     if (tipo === 'logout') { setAutenticado(false); localStorage.removeItem('autenticadoConfecao'); setEcraAtual('home'); }
     else if (tipo === 'cancelar_lote') { setListaExpedicao([]); setEcraAtual('home'); }
-    else if (tipo === 'saida' && idParaApagar) {
-      await supabase.from('saidas').delete().eq('id', idParaApagar);
-      carregarDados();
-    }
-    else if (tipo === 'artigo' && idParaApagar) {
-      await supabase.from('artigos').delete().eq('id', idParaApagar);
-      carregarDados();
-    }
+    else if (tipo === 'saida' && idParaApagar) { await supabase.from('saidas').delete().eq('id', idParaApagar); carregarDados(); }
+    else if (tipo === 'artigo' && idParaApagar) { await supabase.from('artigos').delete().eq('id', idParaApagar); carregarDados(); }
     else if (tipo === 'lote_inteiro' && idParaApagar) {
       const { error } = await supabase.from('saidas').delete().eq('lote_id', idParaApagar as string);
       if (!error) { carregarDados(); mostrarAlerta('Sucesso', 'A expedição foi eliminada.', 'sucesso'); }
@@ -262,7 +246,32 @@ export default function App() {
 
   const obterOportunidadesPendentes = () => {
     const ops = encomendas.map(e => e.op_numero);
-    return Array.from(new Set(ops)); // Apenas OPs unicas
+    return Array.from(new Set(ops));
+  };
+
+  // --- NOVA LÓGICA: AGRUPAR OPs PENDENTES E CALCULAR STATUS DA DATA ---
+  const agruparEncomendasPendentes = () => {
+    const grupos: Record<string, { op_numero: string; data_entrega: string | null; itens: Encomenda[] }> = {};
+    encomendas.forEach(enc => {
+      if (!grupos[enc.op_numero]) grupos[enc.op_numero] = { op_numero: enc.op_numero, data_entrega: enc.data_entrega || null, itens: [] };
+      grupos[enc.op_numero].itens.push(enc);
+    });
+    return Object.values(grupos);
+  };
+
+  const calcularStatusData = (dataStr: string | null) => {
+    if (!dataStr) return { corBorda: 'var(--border-color)', icone: '📅', texto: 'Sem prazo definido' };
+    
+    const dataEntrega = new Date(dataStr);
+    const hoje = new Date();
+    dataEntrega.setHours(0,0,0,0); hoje.setHours(0,0,0,0);
+    
+    const diffTime = dataEntrega.getTime() - hoje.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) return { corBorda: '#ef4444', icone: '🔴', texto: `Atrasada (${Math.abs(diffDays)} dias)` }; // Vermelho
+    if (diffDays <= 5) return { corBorda: '#eab308', icone: '🟡', texto: `Atenção: Falta(m) ${diffDays} dia(s)` }; // Amarelo
+    return { corBorda: '#22c55e', icone: '🟢', texto: `No prazo (${new Date(dataStr).toLocaleDateString('pt-PT')})` }; // Verde
   };
 
   // --- GERAÇÃO DE PDF ---
@@ -278,7 +287,6 @@ export default function App() {
       ? [`${i.artigo_codigo} - ${i.artigo_nome}`, i.op_numero, i.tamanho, i.quantidade.toString(), `${Number(i.total_faturado).toFixed(2)}`] 
       : [`${i.artigo_codigo} - ${i.artigo_nome}`, i.op_numero, i.tamanho, i.quantidade.toString()]
     );
-
     autoTable(doc, { startY: 40, head: [colunas], body: linhas, theme: 'grid', headStyles: { fillColor: [37, 99, 235] }, styles: { fontSize: 10, cellPadding: 4 } });
 
     const totalQtd = grupo.itens.reduce((acc: number, i: Saida) => acc + i.quantidade, 0);
@@ -325,14 +333,21 @@ export default function App() {
 
       <main style={{ padding: '20px', paddingBottom: '90px' }}>
         
-        {/* PÁGINA INICIAL */}
+        {/* PÁGINA INICIAL ATUALIZADA */}
         {ecraAtual === 'home' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '10px' }}>Painel Principal</h2>
-            <button onClick={() => setEcraAtual('nova_encomenda')} style={{...btnPrimary, padding: '20px', fontSize: '1.1rem', backgroundColor: '#8b5cf6'}}>📥 Registar Entrada (Nova OP)</button>
-            <button onClick={() => setEcraAtual('escolher_expedicao')} style={{...btnPrimary, padding: '20px', fontSize: '1.1rem'}}>📦 Registar Saída (Expedição)</button>
             
-            <div style={{ borderTop: '1px solid var(--border-color)', margin: '20px 0' }}></div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <button onClick={() => setEcraAtual('nova_encomenda')} style={{...btnPrimary, padding: '20px', fontSize: '1.1rem', backgroundColor: '#8b5cf6'}}>📥 Registar Entrada</button>
+              <button onClick={() => setEcraAtual('escolher_expedicao')} style={{...btnPrimary, padding: '20px', fontSize: '1.1rem'}}>📦 Registar Saída</button>
+            </div>
+            
+            <button onClick={() => setEcraAtual('encomendas_pendentes')} style={{...btnCard, padding: '20px', fontSize: '1.1rem', backgroundColor: 'var(--surface-color)', border: '2px dashed var(--primary-color)', color: 'var(--primary-color)'}}>
+              📋 OPs Pendentes
+            </button>
+
+            <div style={{ borderTop: '1px solid var(--border-color)', margin: '10px 0' }}></div>
             
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
               <button onClick={() => setEcraAtual('novo_produto')} style={btnSecondary}>➕ Novo Produto</button>
@@ -342,14 +357,53 @@ export default function App() {
           </div>
         )}
 
-        {/* REGISTAR ENTRADA (NOVA OP) */}
+        {/* ECRÃ OPs PENDENTES (NOVO) */}
+        {ecraAtual === 'encomendas_pendentes' && (
+          <div style={{ animation: 'fadeIn 0.3s' }}>
+            <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Encomendas por Entregar</h2>
+            
+            {encomendas.length === 0 ? (
+               <p style={{ color: 'var(--text-secondary)', textAlign: 'center' }}>Não existem encomendas pendentes.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {agruparEncomendasPendentes().map(grupo => {
+                  const status = calcularStatusData(grupo.data_entrega);
+                  return (
+                    <div key={grupo.op_numero} style={{ backgroundColor: 'var(--surface-color)', border: `2px solid ${status.corBorda}`, borderRadius: '12px', overflow: 'hidden' }}>
+                      <div style={{ padding: '15px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.02)' }}>
+                        <strong style={{ fontSize: '1.2rem' }}>{grupo.op_numero}</strong>
+                        <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{status.icone} {status.texto}</div>
+                      </div>
+                      <div style={{ padding: '15px' }}>
+                        <h4 style={{ margin: '0 0 10px 0', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Falta produzir/entregar:</h4>
+                        {grupo.itens.map(item => (
+                          <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px dashed rgba(255,255,255,0.05)' }}>
+                            <span>{item.artigo_nome}</span>
+                            <strong style={{ color: 'var(--primary-color)' }}>{item.quantidade_pedida} un.</strong>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* REGISTAR ENTRADA COM DATA DE ENTREGA */}
         {ecraAtual === 'nova_encomenda' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Nova Encomenda (Entrada)</h2>
             
-            <div style={{ marginBottom: '25px' }}>
+            <div style={{ marginBottom: '15px' }}>
               <label style={labelStyle}>Número da OP (ex: OP-001)</label>
               <input type="text" value={novaOpNumero} onChange={e => setNovaOpNumero(e.target.value)} required style={inputStyle} />
+            </div>
+
+            <div style={{ marginBottom: '25px' }}>
+              <label style={labelStyle}>Data de Entrega (Opcional)</label>
+              <input type="date" value={novaOpDataEntrega} onChange={e => setNovaOpDataEntrega(e.target.value)} style={inputStyle} />
             </div>
 
             <div style={{ backgroundColor: 'var(--surface-color)', padding: '15px', borderRadius: '12px', marginBottom: '20px' }}>
@@ -395,12 +449,10 @@ export default function App() {
                 </select>
                 <button onClick={iniciarExpedicaoOP} style={btnPrimary}>Iniciar Expedição Desta OP</button>
               </div>
-
               <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontWeight: 'bold' }}>OU</div>
-
               <div style={{ backgroundColor: 'var(--surface-color)', padding: '20px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
                 <h3 style={{ margin: '0 0 10px 0' }}>🔓 Expedição Livre (Manual)</h3>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '15px' }}>Envio direto de peças avulsas sem controlo de encomendas prévias.</p>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '15px' }}>Envio direto sem controlo de encomendas prévias.</p>
                 <button onClick={iniciarExpedicaoLivre} style={btnSecondary}>Iniciar Expedição Livre</button>
               </div>
             </div>
@@ -419,7 +471,6 @@ export default function App() {
               <button onClick={() => { setModoSaida('manual'); setArtigoSelecionado(null); setEcraAtual('formulario_saida'); }} style={{...btnSecondary, borderStyle: 'dashed'}}>✍️ Inserir Manual</button>
             </div>
 
-            {/* PAINEL DE CONTROLO INTELIGENTE (Só aparece no modo OP) */}
             {modoExpedicao === 'op' && (
               <div style={{ backgroundColor: 'var(--surface-color)', padding: '15px', borderRadius: '12px', marginBottom: '25px', border: '1px solid var(--border-color)' }}>
                 <h3 style={{ fontSize: '1rem', color: 'var(--text-secondary)', marginBottom: '10px', textTransform: 'uppercase' }}>Falta Entregar nesta OP:</h3>
@@ -428,12 +479,8 @@ export default function App() {
                   const concluido = qtdLida >= enc.quantidade_pedida;
                   return (
                     <div key={enc.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px dashed rgba(255,255,255,0.05)' }}>
-                      <span style={{ color: concluido ? '#22c55e' : 'var(--text-primary)', textDecoration: concluido ? 'line-through' : 'none' }}>
-                        {enc.artigo_nome}
-                      </span>
-                      <strong style={{ color: concluido ? '#22c55e' : '#ef4444' }}>
-                        {qtdLida} / {enc.quantidade_pedida} {concluido ? '✅' : ''}
-                      </strong>
+                      <span style={{ color: concluido ? '#22c55e' : 'var(--text-primary)', textDecoration: concluido ? 'line-through' : 'none' }}>{enc.artigo_nome}</span>
+                      <strong style={{ color: concluido ? '#22c55e' : '#ef4444' }}>{qtdLida} / {enc.quantidade_pedida} {concluido ? '✅' : ''}</strong>
                     </div>
                   );
                 })}
@@ -441,7 +488,6 @@ export default function App() {
             )}
 
             <h3 style={{ fontSize: '1.1rem', marginBottom: '10px' }}>Peças Lidas ({listaExpedicao.length})</h3>
-            
             {listaExpedicao.length === 0 ? (
               <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '30px 0', border: '1px dashed var(--border-color)', borderRadius: '12px' }}>O lote está vazio. Comece a picar material!</p>
             ) : (
@@ -503,9 +549,7 @@ export default function App() {
               <div>
                 <label style={labelStyle}>OP n.º (Ordem de Produção)</label>
                 {modoExpedicao === 'op' ? (
-                  <div style={{ padding: '12px', backgroundColor: 'var(--surface-color)', borderRadius: '8px', border: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
-                    Bloqueado à {opSelecionada}
-                  </div>
+                  <div style={{ padding: '12px', backgroundColor: 'var(--surface-color)', borderRadius: '8px', border: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>Bloqueado à {opSelecionada}</div>
                 ) : (
                   <input type="text" value={formOP} onChange={e => setFormOP(e.target.value)} required placeholder="Ex: OP-001" style={inputStyle} />
                 )}
@@ -585,7 +629,7 @@ export default function App() {
                     </div>
                     {grupo.lote_id.startsWith('Expedição') && (
                       <div style={{ display: 'flex', gap: '10px', padding: '15px 15px 0 15px' }}>
-                        <button onClick={() => gerarPDF(grupo, false)} style={{...btnSecondary, padding: '10px', fontSize: '0.85rem', flex: 1}}>📄 Guia Cliente (Sem Preços)</button>
+                        <button onClick={() => gerarPDF(grupo, false)} style={{...btnSecondary, padding: '10px', fontSize: '0.85rem', flex: 1}}>📄 Guia Cliente</button>
                         <button onClick={() => gerarPDF(grupo, true)} style={{...btnPrimary, padding: '10px', fontSize: '0.85rem', flex: 1}}>📄 Guia Interna</button>
                       </div>
                     )}
