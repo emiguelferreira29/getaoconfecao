@@ -10,7 +10,7 @@ export default defineConfig({
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
         name: 'Gestão de Confeção',
-        short_name: 'ConfeçãoApp',
+        short_name: 'Confeção',
         description: 'App de controlo de peças e faturação',
         theme_color: '#121212',
         background_color: '#121212',
