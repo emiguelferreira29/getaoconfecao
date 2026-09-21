@@ -5,82 +5,60 @@ import './index.css';
 
 // --- TIPOS DE DADOS ---
 type Artigo = { id: number; codigo: string; nome: string; preco: number; };
-type Saida = { id: number; artigo_codigo: string; artigo_nome: string; quantidade: number; total_faturado: number; data: string; op_numero: string; tamanho: string; };
-type Ecra = 'home' | 'catalogo' | 'novo_produto' | 'escolher_saida' | 'scanner' | 'formulario_saida' | 'relatorio';
+type Saida = { id: number; artigo_codigo: string; artigo_nome: string; quantidade: number; total_faturado: number; data: string; op_numero: string; tamanho: string; lote_id: string | null; };
+type ItemExpedicao = { artigo_codigo: string; artigo_nome: string; quantidade: number; total_faturado: number; op_numero: string; tamanho: string; };
+type Ecra = 'home' | 'catalogo' | 'novo_produto' | 'resumo_expedicao' | 'scanner' | 'formulario_saida' | 'relatorio';
 
 export default function App() {
   // --- SISTEMA DE LOGIN ---
-  const [autenticado, setAutenticado] = useState<boolean>(() => {
-    return localStorage.getItem('autenticadoConfecao') === 'true';
-  });
+  const [autenticado, setAutenticado] = useState<boolean>(() => localStorage.getItem('autenticadoConfecao') === 'true');
   const [loginUser, setLoginUser] = useState('');
   const [loginPass, setLoginPass] = useState('');
 
-  // Lê o ecrã da memória do navegador, se não existir abre o 'home'
-  const [ecraAtual, setEcraAtual] = useState<Ecra>(() => {
-    const ecraGuardado = localStorage.getItem('ecraAtualConfecao');
-    return (ecraGuardado as Ecra) || 'home';
-  });
+  // --- NAVEGAÇÃO ---
+  const [ecraAtual, setEcraAtual] = useState<Ecra>(() => (localStorage.getItem('ecraAtualConfecao') as Ecra) || 'home');
 
-  // Sempre que o ecrã muda, guarda a posição na memória do navegador
   useEffect(() => {
     localStorage.setItem('ecraAtualConfecao', ecraAtual);
   }, [ecraAtual]);
 
+  // --- DADOS DA BASE DE DADOS ---
   const [artigos, setArtigos] = useState<Artigo[]>([]);
   const [saidas, setSaidas] = useState<Saida[]>([]);
   const [aCarregar, setACarregar] = useState<boolean>(true);
   
-  // Estados para o Formulário de Saída
+  // --- ESTADOS DO LOTE DE EXPEDIÇÃO (NOVO) ---
+  const [listaExpedicao, setListaExpedicao] = useState<ItemExpedicao[]>([]);
+  
+  // --- ESTADOS PARA O FORMULÁRIO DE SAÍDA ---
   const [modoSaida, setModoSaida] = useState<'scanner' | 'manual' | null>(null);
   const [artigoSelecionado, setArtigoSelecionado] = useState<Artigo | null>(null);
   const [pausarCamara, setPausarCamara] = useState<boolean>(false);
-
-  // Estados dos inputs
   const [formOP, setFormOP] = useState('');
   const [formTamanho, setFormTamanho] = useState('');
   const [formQtd, setFormQtd] = useState('');
   
+  // --- ESTADOS PARA NOVO PRODUTO ---
   const [novoCod, setNovoCod] = useState('');
   const [novoNome, setNovoNome] = useState('');
   const [novoPreco, setNovoPreco] = useState('');
-
-  // Estados para Edição de Preço no Catálogo
   const [editandoPrecoId, setEditandoPrecoId] = useState<number | null>(null);
   const [precoEditado, setPrecoEditado] = useState<string>('');
 
-  // Estados para o Modal de Confirmação (AGORA SUPORTA LOGOUT)
-  const [modalConfirmacao, setModalConfirmacao] = useState<{ aberto: boolean; tipo: 'saida' | 'artigo' | 'logout' | null; idParaApagar: number | null }>({ aberto: false, tipo: null, idParaApagar: null });
+  // --- MODAL DE CONFIRMAÇÃO UNIFICADO ---
+  const [modalConfirmacao, setModalConfirmacao] = useState<{ aberto: boolean; tipo: 'saida' | 'artigo' | 'logout' | 'cancelar_lote' | null; idParaApagar: number | null }>({ aberto: false, tipo: null, idParaApagar: null });
 
-  // Só carrega os dados da base de dados se o utilizador já tiver feito login
   useEffect(() => {
-    if (autenticado) {
-      carregarDados();
-    }
+    if (autenticado) carregarDados();
   }, [autenticado]);
 
   async function carregarDados() {
     setACarregar(true);
-    
-    // 1. Tentar carregar artigos (ORDENADOS POR CÓDIGO)
     const { data: dadosArtigos, error: erroArtigos } = await supabase.from('artigos').select('*').order('codigo');
-    
-    if (erroArtigos) {
-      alert(`ERRO SUPABASE (Artigos): ${erroArtigos.message}`);
-      console.error(erroArtigos);
-    } else if (dadosArtigos) {
-      setArtigos(dadosArtigos);
-    }
+    if (erroArtigos) console.error(erroArtigos); else if (dadosArtigos) setArtigos(dadosArtigos);
 
-    // 2. Tentar carregar saídas
     const { data: dadosSaidas, error: erroSaidas } = await supabase.from('saidas').select('*').order('data', { ascending: false });
-    
-    if (erroSaidas) {
-      alert(`ERRO SUPABASE (Saídas): ${erroSaidas.message}`);
-      console.error(erroSaidas);
-    } else if (dadosSaidas) {
-      setSaidas(dadosSaidas);
-    }
+    if (erroSaidas) console.error(erroSaidas); else if (dadosSaidas) setSaidas(dadosSaidas);
     
     setACarregar(false);
   }
@@ -91,47 +69,36 @@ export default function App() {
     if ((loginUser === 'nelaze' && loginPass === '1988') || (loginUser === 'admin' && loginPass === 'admin')) {
       setAutenticado(true);
       localStorage.setItem('autenticadoConfecao', 'true');
-      setLoginUser('');
-      setLoginPass('');
-    } else {
-      alert('Credenciais incorretas. Tente novamente.');
-    }
+      setLoginUser(''); setLoginPass('');
+    } else alert('Credenciais incorretas. Tente novamente.');
   };
 
   const handleLogout = () => {
-    // Agora chama o nosso Modal em vez do alerta do navegador!
     setModalConfirmacao({ aberto: true, tipo: 'logout', idParaApagar: null });
   };
 
-  // --- LÓGICA DE REGISTO E EDIÇÃO ---
+  // --- LÓGICA DE CATÁLOGO ---
   const registarNovoProduto = async (e: React.FormEvent) => {
     e.preventDefault();
     const precoNum = parseFloat(novoPreco.replace(',', '.'));
     if (!novoCod || !novoNome || isNaN(precoNum)) return alert('Preencha todos os campos corretamente.');
 
     const { error } = await supabase.from('artigos').insert({ codigo: novoCod, nome: novoNome, preco: precoNum });
-    if (error) {
-      alert(`Erro: ${error.message}`);
-    } else {
-      alert('Produto registado com sucesso!');
-      setNovoCod(''); setNovoNome(''); setNovoPreco('');
-      carregarDados();
-      setEcraAtual('catalogo');
-    }
+    if (error) alert(`Erro: ${error.message}`);
+    else { alert('Produto registado com sucesso!'); setNovoCod(''); setNovoNome(''); setNovoPreco(''); carregarDados(); setEcraAtual('catalogo'); }
   };
 
   const guardarNovoPreco = async (id: number) => {
     const precoNum = parseFloat(precoEditado.replace(',', '.'));
     if (isNaN(precoNum) || precoNum < 0) return alert('Preço inválido.');
-
     const { error } = await supabase.from('artigos').update({ preco: precoNum }).eq('id', id);
-    
-    if (error) {
-      alert(`Erro ao atualizar: ${error.message}`);
-    } else {
-      setEditandoPrecoId(null);
-      carregarDados(); 
-    }
+    if (error) alert(`Erro: ${error.message}`); else { setEditandoPrecoId(null); carregarDados(); }
+  };
+
+  // --- LÓGICA DO NOVO LOTE DE EXPEDIÇÃO ---
+  const iniciarNovaExpedicao = () => {
+    setListaExpedicao([]); // Limpa a lista
+    setEcraAtual('resumo_expedicao');
   };
 
   const processarLeituraScanner = (codigosLidos: any[]) => {
@@ -149,38 +116,75 @@ export default function App() {
     }
   };
 
-  const guardarSaida = async (e: React.FormEvent) => {
+  // NOVO: Adiciona a peça à lista temporária em vez de ir logo à base de dados
+  const adicionarAoLote = (e: React.FormEvent) => {
     e.preventDefault();
     if (!artigoSelecionado) return alert('Selecione um artigo.');
     
     const qtdNum = parseInt(formQtd);
     if (isNaN(qtdNum) || qtdNum <= 0) return alert('Quantidade inválida.');
 
-    const totalCalculado = qtdNum * artigoSelecionado.preco;
-
-    const { error } = await supabase.from('saidas').insert({
+    const novoItem: ItemExpedicao = {
       artigo_codigo: artigoSelecionado.codigo,
       artigo_nome: artigoSelecionado.nome,
       quantidade: qtdNum,
-      total_faturado: totalCalculado,
+      total_faturado: qtdNum * artigoSelecionado.preco,
       op_numero: formOP,
       tamanho: formTamanho
-    });
+    };
+
+    setListaExpedicao([...listaExpedicao, novoItem]);
+    
+    // Limpamos apenas a quantidade e o artigo. 
+    // Deixamos a formOP e formTamanho na memória para a próxima peça!
+    setFormQtd('');
+    setArtigoSelecionado(null);
+    setEcraAtual('resumo_expedicao');
+  };
+
+  const removerDoLoteTemporario = (index: number) => {
+    const novaLista = [...listaExpedicao];
+    novaLista.splice(index, 1);
+    setListaExpedicao(novaLista);
+  };
+
+  // NOVO: Envia todo o lote para o Supabase
+  const finalizarExpedicao = async () => {
+    if (listaExpedicao.length === 0) return;
+
+    // Gera um ID único para este lote
+    const loteId = `LOTE-${Date.now()}`;
+    
+    const dadosParaInserir = listaExpedicao.map(item => ({
+      ...item,
+      lote_id: loteId // A nossa nova coluna
+    }));
+
+    const { error } = await supabase.from('saidas').insert(dadosParaInserir);
 
     if (error) {
-      alert(`Erro ao guardar: ${error.message}`);
+      alert(`Erro ao guardar lote: ${error.message}`);
     } else {
-      alert(`✅ Guardado: ${qtdNum}x ${artigoSelecionado.nome}`);
-      setFormOP(''); setFormTamanho(''); setFormQtd('');
-      setArtigoSelecionado(null);
+      alert(`✅ Lote de Expedição Guardado com Sucesso!`);
+      setListaExpedicao([]);
+      setFormOP(''); // Limpa a OP apenas no final do lote inteiro
+      setFormTamanho('');
       carregarDados();
       setEcraAtual('home');
     }
   };
 
-  // FUNÇÕES DO MODAL UNIFICADO (Apagar e Sair)
+  // --- LÓGICA DO MODAL UNIFICADO ---
   const pedirConfirmacaoApagar = (id: number, tipo: 'saida' | 'artigo') => {
     setModalConfirmacao({ aberto: true, tipo, idParaApagar: id });
+  };
+
+  const pedirConfirmacaoCancelarLote = () => {
+    if (listaExpedicao.length > 0) {
+      setModalConfirmacao({ aberto: true, tipo: 'cancelar_lote', idParaApagar: null });
+    } else {
+      setEcraAtual('home');
+    }
   };
 
   const cancelarModal = () => {
@@ -191,58 +195,59 @@ export default function App() {
     const { idParaApagar, tipo } = modalConfirmacao;
     if (!tipo) return;
 
-    // Se a ação for LOGOUT
     if (tipo === 'logout') {
-      setAutenticado(false);
-      localStorage.removeItem('autenticadoConfecao');
-      setEcraAtual('home');
-    } 
-    // Se a ação for APAGAR SAÍDA
-    else if (tipo === 'saida' && idParaApagar) {
+      setAutenticado(false); localStorage.removeItem('autenticadoConfecao'); setEcraAtual('home');
+    } else if (tipo === 'cancelar_lote') {
+      setListaExpedicao([]); setEcraAtual('home');
+    } else if (tipo === 'saida' && idParaApagar) {
       const { error } = await supabase.from('saidas').delete().eq('id', idParaApagar);
-      if (error) {
-        alert(`Erro ao apagar saída: ${error.message}`);
-      } else {
-        setSaidas(saidas.filter(saida => saida.id !== idParaApagar));
-      }
-    } 
-    // Se a ação for APAGAR ARTIGO
-    else if (tipo === 'artigo' && idParaApagar) {
+      if (!error) setSaidas(saidas.filter(s => s.id !== idParaApagar)); else alert(error.message);
+    } else if (tipo === 'artigo' && idParaApagar) {
       const { error } = await supabase.from('artigos').delete().eq('id', idParaApagar);
-      if (error) {
-        alert(`Erro ao apagar artigo: ${error.message}`);
-      } else {
-        setArtigos(artigos.filter(artigo => artigo.id !== idParaApagar));
-      }
+      if (!error) setArtigos(artigos.filter(a => a.id !== idParaApagar)); else alert(error.message);
     }
-    
-    // Fecha o modal após qualquer ação
     setModalConfirmacao({ aberto: false, tipo: null, idParaApagar: null });
   };
 
-  // --- ECRÃ DE LOGIN (Mostrado se não estiver autenticado) ---
+  // --- PREPARAÇÃO DE DADOS PARA O RELATÓRIO (AGRUPAMENTO) ---
+  const agruparSaidas = () => {
+    const grupos = saidas.reduce((acc, saida) => {
+      // Se não tiver lote, tratamos como se fosse um lote individual para efeitos visuais
+      const chave = saida.lote_id || `avulso-${saida.id}`; 
+      
+      if (!acc[chave]) {
+        acc[chave] = {
+          lote_id: chave,
+          data: saida.data,
+          total_faturado: 0,
+          itens: []
+        };
+      }
+      
+      acc[chave].total_faturado += Number(saida.total_faturado);
+      acc[chave].itens.push(saida);
+      return acc;
+    }, {} as Record<string, { lote_id: string; data: string; total_faturado: number; itens: Saida[] }>);
+
+    return Object.values(grupos).sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
+  };
+
+
+  // --- ECRÃ DE LOGIN ---
   if (!autenticado) {
     return (
       <div style={{ maxWidth: '600px', margin: '0 auto', minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '20px', backgroundColor: 'var(--bg-color)', animation: 'fadeIn 0.5s' }}>
         <img src="/logo.png" alt="Logótipo" style={{ width: '130px', height: '130px', objectFit: 'contain', borderRadius: '24px', marginBottom: '20px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
         <h2 style={{ fontSize: '1.8rem', color: 'var(--primary-color)', marginBottom: '30px' }}>Bem-vindo</h2>
-        
         <form onSubmit={handleLogin} style={{ width: '100%', maxWidth: '300px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
-          <div>
-            <label style={labelStyle}>Utilizador</label>
-            <input type="text" value={loginUser} onChange={e => setLoginUser(e.target.value)} required style={inputStyle} />
-          </div>
-          <div>
-            <label style={labelStyle}>Palavra-passe</label>
-            <input type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} required style={inputStyle} />
-          </div>
+          <div><label style={labelStyle}>Utilizador</label><input type="text" value={loginUser} onChange={e => setLoginUser(e.target.value)} required style={inputStyle} /></div>
+          <div><label style={labelStyle}>Palavra-passe</label><input type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} required style={inputStyle} /></div>
           <button type="submit" style={{ ...btnPrimary, marginTop: '10px' }}>Entrar</button>
         </form>
       </div>
     );
   }
 
-  // --- INTERFACE PRINCIPAL (UI) ---
   if (aCarregar) return <div className="loading">A sincronizar com a base de dados...</div>;
 
   return (
@@ -256,121 +261,112 @@ export default function App() {
         </div>
         <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
           {ecraAtual !== 'home' && (
-            <button onClick={() => setEcraAtual('home')} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.9rem' }}>
+            <button 
+              onClick={() => ecraAtual === 'resumo_expedicao' ? pedirConfirmacaoCancelarLote() : setEcraAtual('home')} 
+              style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.9rem' }}
+            >
               ◀ Voltar
             </button>
           )}
-          <button onClick={handleLogout} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.4rem' }} title="Terminar Sessão">
-            🚪
-          </button>
+          <button onClick={handleLogout} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.4rem' }} title="Terminar Sessão">🚪</button>
         </div>
       </header>
 
       <main style={{ padding: '20px', paddingBottom: '90px' }}>
         
-        {/* 1. PÁGINA DE ROSTO (HOME) */}
+        {/* 1. HOME */}
         {ecraAtual === 'home' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '10px' }}>Painel Principal</h2>
-            
-            <button onClick={() => setEcraAtual('escolher_saida')} style={btnPrimary}>
-              📦 Registar Saída de Produto
-            </button>
-            <button onClick={() => setEcraAtual('novo_produto')} style={btnSecondary}>
-              ➕ Registar Novo Produto
-            </button>
-            
+            <button onClick={iniciarNovaExpedicao} style={{...btnPrimary, padding: '20px', fontSize: '1.1rem'}}>📦 Nova Expedição de Lote</button>
+            <button onClick={() => setEcraAtual('novo_produto')} style={btnSecondary}>➕ Registar Novo Produto</button>
             <div style={{ borderTop: '1px solid var(--border-color)', margin: '20px 0' }}></div>
-            
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-              <button onClick={() => setEcraAtual('catalogo')} style={btnCard}>
-                <span style={{ fontSize: '2rem', display: 'block', marginBottom: '10px' }}>📋</span>
-                Ver Catálogo
-              </button>
-              <button onClick={() => setEcraAtual('relatorio')} style={btnCard}>
-                <span style={{ fontSize: '2rem', display: 'block', marginBottom: '10px' }}>📊</span>
-                Relatórios
-              </button>
+              <button onClick={() => setEcraAtual('catalogo')} style={btnCard}><span style={{ fontSize: '2rem', display: 'block', marginBottom: '10px' }}>📋</span>Catálogo</button>
+              <button onClick={() => setEcraAtual('relatorio')} style={btnCard}><span style={{ fontSize: '2rem', display: 'block', marginBottom: '10px' }}>📊</span>Relatórios</button>
             </div>
           </div>
         )}
 
-        {/* 2. REGISTAR NOVO PRODUTO */}
-        {ecraAtual === 'novo_produto' && (
+        {/* 2. NOVO ECRÃ: RESUMO DA EXPEDIÇÃO (Carrinho) */}
+        {ecraAtual === 'resumo_expedicao' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
-            <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Novo Produto</h2>
-            <form onSubmit={registarNovoProduto} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <div>
-                <label style={labelStyle}>Código do Artigo (ex: ART-011)</label>
-                <input type="text" value={novoCod} onChange={e => setNovoCod(e.target.value)} required style={inputStyle} />
-              </div>
-              <div>
-                <label style={labelStyle}>Nome do Artigo</label>
-                <input type="text" value={novoNome} onChange={e => setNovoNome(e.target.value)} required style={inputStyle} />
-              </div>
-              <div>
-                <label style={labelStyle}>Preço Unitário (€)</label>
-                <input type="number" step="0.01" value={novoPreco} onChange={e => setNovoPreco(e.target.value)} required style={inputStyle} />
-              </div>
-              <button type="submit" style={btnPrimary}>Guardar Produto</button>
-            </form>
-          </div>
-        )}
-
-        {/* 3. ESCOLHER TIPO DE SAÍDA */}
-        {ecraAtual === 'escolher_saida' && (
-          <div style={{ animation: 'fadeIn 0.3s' }}>
-            <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Método de Registo</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <button onClick={() => { setModoSaida('scanner'); setPausarCamara(false); setEcraAtual('scanner'); }} style={btnPrimary}>
-                📷 Usar Scanner (QR Code)
+            <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Lote de Expedição Atual</h2>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '25px' }}>
+              <button onClick={() => { setModoSaida('scanner'); setPausarCamara(false); setEcraAtual('scanner'); }} style={{...btnSecondary, borderStyle: 'dashed'}}>
+                📷 Picar Código
               </button>
-              <button onClick={() => { setModoSaida('manual'); setArtigoSelecionado(null); setEcraAtual('formulario_saida'); }} style={btnSecondary}>
-                ✍️ Introdução Manual
+              <button onClick={() => { setModoSaida('manual'); setArtigoSelecionado(null); setEcraAtual('formulario_saida'); }} style={{...btnSecondary, borderStyle: 'dashed'}}>
+                ✍️ Inserir Manual
               </button>
             </div>
+
+            <h3 style={{ fontSize: '1.1rem', marginBottom: '10px' }}>Peças no Lote ({listaExpedicao.length})</h3>
+            
+            {listaExpedicao.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '30px 0', border: '1px dashed var(--border-color)', borderRadius: '12px' }}>
+                O lote está vazio. Comece a picar material!
+              </p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '25px' }}>
+                {listaExpedicao.map((item, index) => (
+                  <div key={index} style={{ backgroundColor: 'var(--surface-color)', padding: '12px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <strong style={{ display: 'block' }}>{item.quantidade}x {item.artigo_nome}</strong>
+                      <small style={{ color: 'var(--text-secondary)' }}>OP: {item.op_numero} | Tam: {item.tamanho}</small>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{ fontWeight: 'bold' }}>{item.total_faturado.toFixed(2)}€</span>
+                      <button onClick={() => removerDoLoteTemporario(index)} style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '1.2rem', cursor: 'pointer' }}>✕</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {listaExpedicao.length > 0 && (
+              <div style={{ marginTop: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.2rem', fontWeight: 'bold', marginBottom: '15px' }}>
+                  <span>Faturação do Lote:</span>
+                  <span style={{ color: 'var(--primary-color)' }}>{listaExpedicao.reduce((sum, item) => sum + item.total_faturado, 0).toFixed(2)}€</span>
+                </div>
+                <button onClick={finalizarExpedicao} style={{...btnPrimary, backgroundColor: '#22c55e'}}>
+                  💾 Registar e Finalizar Lote
+                </button>
+              </div>
+            )}
           </div>
         )}
 
-        {/* 4. SCANNER */}
+        {/* 3. SCANNER */}
         {ecraAtual === 'scanner' && (
           <div style={{ animation: 'fadeIn 0.3s', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <h2 style={{ fontSize: '1.5rem', marginBottom: '10px' }}>Ler Código</h2>
+            <h2 style={{ fontSize: '1.5rem', marginBottom: '10px' }}>Ler Peça</h2>
             <div style={{ width: '100%', maxWidth: '350px', aspectRatio: '1', borderRadius: '24px', overflow: 'hidden', border: '2px solid var(--primary-color)', backgroundColor: 'black' }}>
               {!pausarCamara ? (
                 <Scanner onScan={processarLeituraScanner} />
               ) : (
-                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--surface-color)', color: 'var(--primary-color)' }}>
-                  A processar...
-                </div>
+                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--surface-color)', color: 'var(--primary-color)' }}>A processar...</div>
               )}
             </div>
+            <button onClick={() => setEcraAtual('resumo_expedicao')} style={{...btnSecondary, marginTop: '20px'}}>Cancelar Leitura</button>
           </div>
         )}
 
-        {/* 5. FORMULÁRIO DE SAÍDA */}
+        {/* 4. FORMULÁRIO DE SAÍDA (Adiciona ao Lote) */}
         {ecraAtual === 'formulario_saida' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
-            <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Detalhes da Saída</h2>
-            <form onSubmit={guardarSaida} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              
+            <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Detalhes da Peça</h2>
+            <form onSubmit={adicionarAoLote} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               <div>
                 <label style={labelStyle}>Artigo</label>
                 {modoSaida === 'scanner' && artigoSelecionado ? (
-                  <div style={{ padding: '12px', backgroundColor: 'var(--surface-color)', borderRadius: '8px', border: '1px solid var(--primary-color)', color: 'white' }}>
-                    {artigoSelecionado.codigo} - {artigoSelecionado.nome}
-                  </div>
+                  <div style={{ padding: '12px', backgroundColor: 'var(--surface-color)', borderRadius: '8px', border: '1px solid var(--primary-color)', color: 'white' }}>{artigoSelecionado.codigo} - {artigoSelecionado.nome}</div>
                 ) : (
-                  <select 
-                    value={artigoSelecionado?.id || ''} 
-                    onChange={e => setArtigoSelecionado(artigos.find(a => a.id === parseInt(e.target.value)) || null)}
-                    required
-                    style={inputStyle}
-                  >
-                    <option value="" disabled>Selecione um artigo na lista...</option>
-                    {artigos.map(a => (
-                      <option key={a.id} value={a.id}>{a.codigo} - {a.nome}</option>
-                    ))}
+                  <select value={artigoSelecionado?.id || ''} onChange={e => setArtigoSelecionado(artigos.find(a => a.id === parseInt(e.target.value)) || null)} required style={inputStyle}>
+                    <option value="" disabled>Selecione um artigo...</option>
+                    {artigos.map(a => <option key={a.id} value={a.id}>{a.codigo} - {a.nome}</option>)}
                   </select>
                 )}
               </div>
@@ -378,68 +374,51 @@ export default function App() {
               <div>
                 <label style={labelStyle}>OP n.º (Ordem de Produção)</label>
                 <input type="text" value={formOP} onChange={e => setFormOP(e.target.value)} required placeholder="Ex: OP-2024-15" style={inputStyle} />
+                <small style={{color: 'var(--text-secondary)'}}>A OP fica gravada para a próxima peça automaticamente.</small>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                <div>
-                  <label style={labelStyle}>Tamanho</label>
-                  <input type="text" value={formTamanho} onChange={e => setFormTamanho(e.target.value)} required placeholder="Ex: L, XL, 42..." style={inputStyle} />
-                </div>
-                <div>
-                  <label style={labelStyle}>Quantidade</label>
-                  <input type="number" min="1" value={formQtd} onChange={e => setFormQtd(e.target.value)} required style={inputStyle} />
-                </div>
+                <div><label style={labelStyle}>Tamanho</label><input type="text" value={formTamanho} onChange={e => setFormTamanho(e.target.value)} required style={inputStyle} /></div>
+                <div><label style={labelStyle}>Quantidade</label><input type="number" min="1" value={formQtd} onChange={e => setFormQtd(e.target.value)} required style={inputStyle} /></div>
               </div>
 
-              <button type="submit" style={{ ...btnPrimary, marginTop: '10px' }}>Confirmar e Guardar Saída</button>
+              <button type="submit" style={btnPrimary}>➕ Adicionar ao Lote</button>
             </form>
           </div>
         )}
 
-        {/* 6. CATÁLOGO COM EDIÇÃO E ELIMINAÇÃO */}
+        {/* 5. REGISTAR NOVO PRODUTO (Catálogo) */}
+        {ecraAtual === 'novo_produto' && (
+          <div style={{ animation: 'fadeIn 0.3s' }}>
+            <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Novo Produto</h2>
+            <form onSubmit={registarNovoProduto} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <div><label style={labelStyle}>Código do Artigo (ex: ART-011)</label><input type="text" value={novoCod} onChange={e => setNovoCod(e.target.value)} required style={inputStyle} /></div>
+              <div><label style={labelStyle}>Nome do Artigo</label><input type="text" value={novoNome} onChange={e => setNovoNome(e.target.value)} required style={inputStyle} /></div>
+              <div><label style={labelStyle}>Preço Unitário (€)</label><input type="number" step="0.01" value={novoPreco} onChange={e => setNovoPreco(e.target.value)} required style={inputStyle} /></div>
+              <button type="submit" style={btnPrimary}>Guardar Produto</button>
+            </form>
+          </div>
+        )}
+
+        {/* 6. CATÁLOGO COM EDIÇÃO */}
         {ecraAtual === 'catalogo' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Catálogo ({artigos.length})</h2>
             <div style={{ display: 'grid', gap: '10px' }}>
               {artigos.map(artigo => (
                 <div key={artigo.id} style={{ backgroundColor: 'var(--surface-color)', padding: '15px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <strong style={{ display: 'block', fontSize: '1.1rem' }}>{artigo.nome}</strong>
-                    <small style={{ color: 'var(--text-secondary)' }}>{artigo.codigo}</small>
-                  </div>
-                  
+                  <div><strong style={{ display: 'block', fontSize: '1.1rem' }}>{artigo.nome}</strong><small style={{ color: 'var(--text-secondary)' }}>{artigo.codigo}</small></div>
                   {editandoPrecoId === artigo.id ? (
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      <input 
-                        type="number" 
-                        step="0.01" 
-                        value={precoEditado} 
-                        onChange={e => setPrecoEditado(e.target.value)} 
-                        autoFocus 
-                        style={{ ...inputStyle, width: '80px', padding: '8px' }} 
-                      />
+                      <input type="number" step="0.01" value={precoEditado} onChange={e => setPrecoEditado(e.target.value)} autoFocus style={{ ...inputStyle, width: '80px', padding: '8px' }} />
                       <button onClick={() => guardarNovoPreco(artigo.id)} style={{ backgroundColor: '#22c55e', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>✓</button>
                       <button onClick={() => setEditandoPrecoId(null)} style={{ backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>✕</button>
                     </div>
                   ) : (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ color: 'var(--primary-color)', fontWeight: 'bold', fontSize: '1.1rem', marginRight: '4px' }}>
-                        {Number(artigo.preco).toFixed(2)}€
-                      </span>
-                      <button 
-                        onClick={() => { setEditandoPrecoId(artigo.id); setPrecoEditado(artigo.preco.toString()); }} 
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '4px' }} 
-                        title="Editar Preço"
-                      >
-                        ✏️
-                      </button>
-                      <button 
-                        onClick={() => pedirConfirmacaoApagar(artigo.id, 'artigo')} 
-                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.2rem', padding: '4px' }}
-                        title="Apagar Artigo"
-                      >
-                        🗑️
-                      </button>
+                      <span style={{ color: 'var(--primary-color)', fontWeight: 'bold', fontSize: '1.1rem', marginRight: '4px' }}>{Number(artigo.preco).toFixed(2)}€</span>
+                      <button onClick={() => { setEditandoPrecoId(artigo.id); setPrecoEditado(artigo.preco.toString()); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '4px' }}>✏️</button>
+                      <button onClick={() => pedirConfirmacaoApagar(artigo.id, 'artigo')} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.2rem', padding: '4px' }}>🗑️</button>
                     </div>
                   )}
                 </div>
@@ -448,7 +427,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 7. RELATÓRIO COM ELIMINAÇÃO */}
+        {/* 7. RELATÓRIO AGRUPADO POR LOTE */}
         {ecraAtual === 'relatorio' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Histórico Total</h2>
@@ -463,33 +442,36 @@ export default function App() {
             {saidas.length === 0 ? (
               <p style={{ color: 'var(--text-secondary)', textAlign: 'center' }}>Nenhum movimento registado.</p>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {saidas.map(saida => (
-                  <div key={saida.id} style={{ backgroundColor: 'var(--surface-color)', padding: '15px', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {agruparSaidas().map(grupo => (
+                  <div key={grupo.lote_id} style={{ backgroundColor: 'var(--surface-color)', border: '1px solid var(--border-color)', borderRadius: '12px', overflow: 'hidden' }}>
                     
-                    <div>
-                      <strong style={{ display: 'block', marginBottom: '4px' }}>{saida.quantidade}x {saida.artigo_nome}</strong>
-                      <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                        <span>OP: {saida.op_numero}</span> • <span>Tam: {saida.tamanho}</span>
+                    {/* Cabeçalho do Lote */}
+                    <div style={{ backgroundColor: 'rgba(255,255,255,0.03)', padding: '15px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <strong style={{ display: 'block', color: 'var(--primary-color)' }}>
+                          {grupo.lote_id.startsWith('LOTE') ? '📦 Expedição Múltipla' : '📦 Registo Antigo/Avulso'}
+                        </strong>
+                        <small style={{ color: 'var(--text-secondary)' }}>{new Date(grupo.data).toLocaleString('pt-PT')}</small>
                       </div>
-                      <small style={{ color: 'var(--text-secondary)', display: 'block', marginTop: '4px' }}>
-                        {new Date(saida.data).toLocaleDateString('pt-PT')}
-                      </small>
-                    </div>
-                    
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
-                      <span style={{ fontWeight: 'bold', fontSize: '1.1rem', color: 'var(--text-primary)' }}>
-                        {Number(saida.total_faturado).toFixed(2)}€
-                      </span>
-                      <button 
-                        onClick={() => pedirConfirmacaoApagar(saida.id, 'saida')} 
-                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.2rem', padding: '4px' }}
-                        title="Apagar Registo"
-                      >
-                        🗑️
-                      </button>
+                      <div style={{ fontWeight: 'bold', fontSize: '1.2rem' }}>{grupo.total_faturado.toFixed(2)}€</div>
                     </div>
 
+                    {/* Itens dentro do Lote */}
+                    <div style={{ padding: '10px' }}>
+                      {grupo.itens.map(saida => (
+                        <div key={saida.id} style={{ padding: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px dashed rgba(255,255,255,0.1)' }}>
+                          <div>
+                            <strong style={{ display: 'block', fontSize: '0.95rem' }}>{saida.quantidade}x {saida.artigo_nome}</strong>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>OP: {saida.op_numero} | Tam: {saida.tamanho}</div>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span style={{ fontSize: '1rem', color: 'var(--text-primary)' }}>{Number(saida.total_faturado).toFixed(2)}€</span>
+                            <button onClick={() => pedirConfirmacaoApagar(saida.id, 'saida')} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.1rem', padding: '4px' }}>🗑️</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -498,39 +480,30 @@ export default function App() {
         )}
       </main>
 
-      {/* MODAL DE CONFIRMAÇÃO INTELIGENTE (Apagar ou Logout) */}
+      {/* MODAL DE CONFIRMAÇÃO INTELIGENTE */}
       {modalConfirmacao.aberto && (
         <div style={modalOverlayStyle}>
           <div style={modalBoxStyle}>
-            
             <div style={{ fontSize: '2.5rem', marginBottom: '10px' }}>
-              {modalConfirmacao.tipo === 'logout' ? '🚪' : '⚠️'}
+              {modalConfirmacao.tipo === 'logout' ? '🚪' : modalConfirmacao.tipo === 'cancelar_lote' ? '🛑' : '⚠️'}
             </div>
             
             <h3 style={{ margin: '0 0 10px 0', fontSize: '1.2rem', color: 'var(--text-primary)' }}>
-              {modalConfirmacao.tipo === 'logout' ? 'Terminar Sessão' : 'Confirmar Eliminação'}
+              {modalConfirmacao.tipo === 'logout' ? 'Terminar Sessão' : modalConfirmacao.tipo === 'cancelar_lote' ? 'Cancelar Expedição' : 'Confirmar Eliminação'}
             </h3>
             
             <p style={{ color: 'var(--text-secondary)', marginBottom: '25px', fontSize: '0.95rem', lineHeight: '1.4' }}>
-              {modalConfirmacao.tipo === 'logout' ? (
-                'Tem a certeza que deseja sair da sua conta?'
-              ) : (
-                <>Tem a certeza que deseja apagar este registo?<br/>Esta ação não pode ser desfeita.</>
-              )}
+              {modalConfirmacao.tipo === 'logout' ? 'Tem a certeza que deseja sair da sua conta?' : 
+               modalConfirmacao.tipo === 'cancelar_lote' ? 'Vai perder as peças que já adicionou a este lote. Deseja cancelar?' : 
+               <>Tem a certeza que deseja apagar este registo?<br/>Esta ação não pode ser desfeita.</>}
             </p>
             
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button onClick={cancelarModal} style={{ ...btnSecondary, padding: '12px', flex: 1 }}>Cancelar</button>
-              
-              <button onClick={executarAcaoModal} style={{ 
-                ...btnPrimary, 
-                backgroundColor: modalConfirmacao.tipo === 'logout' ? 'var(--primary-color)' : '#ef4444', 
-                padding: '12px', flex: 1 
-              }}>
-                {modalConfirmacao.tipo === 'logout' ? 'Sair' : 'Apagar'}
+              <button onClick={cancelarModal} style={{ ...btnSecondary, padding: '12px', flex: 1 }}>Voltar</button>
+              <button onClick={executarAcaoModal} style={{ ...btnPrimary, backgroundColor: modalConfirmacao.tipo === 'logout' ? 'var(--primary-color)' : '#ef4444', padding: '12px', flex: 1 }}>
+                {modalConfirmacao.tipo === 'logout' ? 'Sair' : modalConfirmacao.tipo === 'cancelar_lote' ? 'Descartar' : 'Apagar'}
               </button>
             </div>
-
           </div>
         </div>
       )}
@@ -545,34 +518,10 @@ export default function App() {
 }
 
 // --- ESTILOS REUTILIZÁVEIS ---
-const btnPrimary: React.CSSProperties = {
-  width: '100%', padding: '15px', backgroundColor: 'var(--primary-color)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer'
-};
-
-const btnSecondary: React.CSSProperties = {
-  width: '100%', padding: '15px', backgroundColor: 'transparent', color: 'var(--text-primary)', border: '2px solid var(--border-color)', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer'
-};
-
-const btnCard: React.CSSProperties = {
-  backgroundColor: 'var(--surface-color)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', padding: '20px', borderRadius: '12px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer', textAlign: 'center'
-};
-
-const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-color)', color: 'var(--text-primary)', fontSize: '1rem', boxSizing: 'border-box'
-};
-
-const labelStyle: React.CSSProperties = {
-  display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: 'bold'
-};
-
-const modalOverlayStyle: React.CSSProperties = {
-  position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', 
-  backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(3px)',
-  display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000
-};
-
-const modalBoxStyle: React.CSSProperties = {
-  backgroundColor: 'var(--surface-color)', padding: '25px', borderRadius: '16px', 
-  width: '85%', maxWidth: '350px', textAlign: 'center', 
-  border: '1px solid var(--border-color)', animation: 'modalFadeIn 0.2s ease-out'
-};
+const btnPrimary: React.CSSProperties = { width: '100%', padding: '15px', backgroundColor: 'var(--primary-color)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer' };
+const btnSecondary: React.CSSProperties = { width: '100%', padding: '15px', backgroundColor: 'transparent', color: 'var(--text-primary)', border: '2px solid var(--border-color)', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer' };
+const btnCard: React.CSSProperties = { backgroundColor: 'var(--surface-color)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', padding: '20px', borderRadius: '12px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer', textAlign: 'center' };
+const inputStyle: React.CSSProperties = { width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-color)', color: 'var(--text-primary)', fontSize: '1rem', boxSizing: 'border-box' };
+const labelStyle: React.CSSProperties = { display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: 'bold' };
+const modalOverlayStyle: React.CSSProperties = { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(3px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 };
+const modalBoxStyle: React.CSSProperties = { backgroundColor: 'var(--surface-color)', padding: '25px', borderRadius: '16px', width: '85%', maxWidth: '350px', textAlign: 'center', border: '1px solid var(--border-color)', animation: 'modalFadeIn 0.2s ease-out' };
