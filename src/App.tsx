@@ -28,6 +28,10 @@ export default function App() {
   const [novoNome, setNovoNome] = useState('');
   const [novoPreco, setNovoPreco] = useState('');
 
+  // Estados para Edição de Preço no Catálogo (NOVO)
+  const [editandoPrecoId, setEditandoPrecoId] = useState<number | null>(null);
+  const [precoEditado, setPrecoEditado] = useState<string>('');
+
   // CORREÇÃO: Isto é o que diz à aplicação para carregar os dados mal abre
   useEffect(() => {
     carregarDados();
@@ -59,7 +63,7 @@ export default function App() {
     setACarregar(false);
   }
 
-  // --- LÓGICA DE REGISTO ---
+  // --- LÓGICA DE REGISTO E EDIÇÃO ---
   const registarNovoProduto = async (e: React.FormEvent) => {
     e.preventDefault();
     const precoNum = parseFloat(novoPreco.replace(',', '.'));
@@ -73,6 +77,21 @@ export default function App() {
       setNovoCod(''); setNovoNome(''); setNovoPreco('');
       carregarDados();
       setEcraAtual('catalogo');
+    }
+  };
+
+  // FUNÇÃO NOVA: Grava o novo preço na base de dados
+  const guardarNovoPreco = async (id: number) => {
+    const precoNum = parseFloat(precoEditado.replace(',', '.'));
+    if (isNaN(precoNum) || precoNum < 0) return alert('Preço inválido.');
+
+    const { error } = await supabase.from('artigos').update({ preco: precoNum }).eq('id', id);
+    
+    if (error) {
+      alert(`Erro ao atualizar: ${error.message}`);
+    } else {
+      setEditandoPrecoId(null);
+      carregarDados(); // Recarrega a lista para mostrar o novo valor
     }
   };
 
@@ -216,13 +235,11 @@ export default function App() {
           </div>
         )}
 
-        {/* 5. FORMULÁRIO DE SAÍDA (Comum a Manual e Scanner) */}
+        {/* 5. FORMULÁRIO DE SAÍDA */}
         {ecraAtual === 'formulario_saida' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Detalhes da Saída</h2>
             <form onSubmit={guardarSaida} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              
-              {/* Seleção de Artigo: Bloqueado se for Scanner, Dropdown se for Manual */}
               <div>
                 <label style={labelStyle}>Artigo</label>
                 {modoSaida === 'scanner' && artigoSelecionado ? (
@@ -265,7 +282,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 6. CATÁLOGO */}
+        {/* 6. CATÁLOGO COM EDIÇÃO */}
         {ecraAtual === 'catalogo' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Catálogo ({artigos.length})</h2>
@@ -276,9 +293,34 @@ export default function App() {
                     <strong style={{ display: 'block', fontSize: '1.1rem' }}>{artigo.nome}</strong>
                     <small style={{ color: 'var(--text-secondary)' }}>{artigo.codigo}</small>
                   </div>
-                  <div style={{ color: 'var(--primary-color)', fontWeight: 'bold' }}>
-                    {Number(artigo.preco).toFixed(2)}€
-                  </div>
+                  
+                  {editandoPrecoId === artigo.id ? (
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <input 
+                        type="number" 
+                        step="0.01" 
+                        value={precoEditado} 
+                        onChange={e => setPrecoEditado(e.target.value)} 
+                        autoFocus 
+                        style={{ ...inputStyle, width: '80px', padding: '8px' }} 
+                      />
+                      <button onClick={() => guardarNovoPreco(artigo.id)} style={{ backgroundColor: '#22c55e', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>✓</button>
+                      <button onClick={() => setEditandoPrecoId(null)} style={{ backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>✕</button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <span style={{ color: 'var(--primary-color)', fontWeight: 'bold', fontSize: '1.1rem' }}>
+                        {Number(artigo.preco).toFixed(2)}€
+                      </span>
+                      <button 
+                        onClick={() => { setEditandoPrecoId(artigo.id); setPrecoEditado(artigo.preco.toString()); }} 
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem' }} 
+                        title="Editar Preço"
+                      >
+                        ✏️
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
