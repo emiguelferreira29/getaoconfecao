@@ -1,0 +1,28 @@
+:root {
+  --bg-color: #121212;
+  --surface-color: #1e1e1e;
+  --primary-color: #3b82f6;
+  --text-primary: #ffffff;
+  --text-secondary: #a0a0a0;
+  --border-color: #333333;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
+    Arial, sans-serif;
+  padding-bottom: 70px; /* Espaço para o menu inferior */
+}
+
+/* Esconder scrollbars para um look mais limpo */
+::-webkit-scrollbar {
+  display: none;
+}
