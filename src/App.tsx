@@ -28,17 +28,29 @@ export default function App() {
   const [novoNome, setNovoNome] = useState('');
   const [novoPreco, setNovoPreco] = useState('');
 
-  useEffect(() => {
-    carregarDados();
-  }, []);
-
   async function carregarDados() {
     setACarregar(true);
-    const { data: dadosArtigos } = await supabase.from('artigos').select('*').order('nome');
-    if (dadosArtigos) setArtigos(dadosArtigos);
+    
+    // 1. Tentar carregar artigos e capturar o erro
+    const { data: dadosArtigos, error: erroArtigos } = await supabase.from('artigos').select('*').order('nome');
+    
+    if (erroArtigos) {
+      alert(`ERRO SUPABASE (Artigos): ${erroArtigos.message}`);
+      console.error(erroArtigos);
+    } else if (dadosArtigos) {
+      setArtigos(dadosArtigos);
+    }
 
-    const { data: dadosSaidas } = await supabase.from('saidas').select('*').order('data', { ascending: false });
-    if (dadosSaidas) setSaidas(dadosSaidas);
+    // 2. Tentar carregar saídas
+    const { data: dadosSaidas, error: erroSaidas } = await supabase.from('saidas').select('*').order('data', { ascending: false });
+    
+    if (erroSaidas) {
+      alert(`ERRO SUPABASE (Saídas): ${erroSaidas.message}`);
+      console.error(erroSaidas);
+    } else if (dadosSaidas) {
+      setSaidas(dadosSaidas);
+    }
+    
     setACarregar(false);
   }
 
