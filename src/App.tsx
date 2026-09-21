@@ -32,6 +32,9 @@ export default function App() {
   const [editandoPrecoId, setEditandoPrecoId] = useState<number | null>(null);
   const [precoEditado, setPrecoEditado] = useState<string>('');
 
+  // Estados para o Modal de Confirmação (NOVO)
+  const [modalConfirmacao, setModalConfirmacao] = useState<{ aberto: boolean; idParaApagar: number | null }>({ aberto: false, idParaApagar: null });
+
   useEffect(() => {
     carregarDados();
   }, []);
@@ -137,19 +140,29 @@ export default function App() {
     }
   };
 
-  // FUNÇÃO NOVA: Apagar um registo de saída
-  const apagarSaida = async (id: number) => {
-    const confirmar = window.confirm('Tem a certeza que deseja APAGAR este registo? Esta ação não pode ser desfeita.');
-    if (!confirmar) return;
+  // FUNÇÕES NOVAS: Gerir o Modal e Apagar o Registo
+  const pedirConfirmacaoApagar = (id: number) => {
+    setModalConfirmacao({ aberto: true, idParaApagar: id });
+  };
+
+  const cancelarApagar = () => {
+    setModalConfirmacao({ aberto: false, idParaApagar: null });
+  };
+
+  const executarApagar = async () => {
+    const id = modalConfirmacao.idParaApagar;
+    if (!id) return;
 
     const { error } = await supabase.from('saidas').delete().eq('id', id);
     
     if (error) {
       alert(`Erro ao apagar: ${error.message}`);
     } else {
-      // Remove o item da lista localmente para ser instantâneo (sem precisar de recarregar tudo)
+      // Remove o item da lista localmente
       setSaidas(saidas.filter(saida => saida.id !== id));
     }
+    // Fecha o modal em qualquer dos casos
+    setModalConfirmacao({ aberto: false, idParaApagar: null });
   };
 
   // --- INTERFACE (UI) ---
@@ -157,14 +170,13 @@ export default function App() {
 
   return (
     <div style={{ maxWidth: '600px', margin: '0 auto', minHeight: '100vh', position: 'relative' }}>
+      
+      {/* CABEÇALHO */}
       <header style={{ padding: '20px', backgroundColor: 'var(--surface-color)', borderBottom: '1px solid var(--border-color)', position: 'sticky', top: 0, zIndex: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        
-        {/* LOGÓTIPO ADICIONADO AQUI */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <img src="/logo.png" alt="Logótipo" style={{ height: '35px', width: '35px', objectFit: 'contain', borderRadius: '8px' }} />
           <h1 style={{ fontSize: '1.2rem', margin: 0, color: 'var(--primary-color)' }}>Confeção</h1>
         </div>
-
         {ecraAtual !== 'home' && (
           <button onClick={() => setEcraAtual('home')} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.9rem' }}>
             ◀ Voltar
@@ -347,7 +359,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 7. RELATÓRIO ATUALIZADO COM BOTÃO APAGAR */}
+        {/* 7. RELATÓRIO */}
         {ecraAtual === 'relatorio' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Histórico Total</h2>
@@ -376,13 +388,13 @@ export default function App() {
                       </small>
                     </div>
                     
-                    {/* Bloco da direita: Valor e Botão Apagar */}
+                    {/* Bloco da direita: Valor e Botão Apagar que chama o NOVO Modal */}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
                       <span style={{ fontWeight: 'bold', fontSize: '1.1rem', color: 'var(--text-primary)' }}>
                         {Number(saida.total_faturado).toFixed(2)}€
                       </span>
                       <button 
-                        onClick={() => apagarSaida(saida.id)} 
+                        onClick={() => pedirConfirmacaoApagar(saida.id)} 
                         style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.2rem', padding: '4px' }}
                         title="Apagar Registo"
                       >
@@ -398,9 +410,27 @@ export default function App() {
         )}
       </main>
 
+      {/* NOVO: MODAL DE CONFIRMAÇÃO DESENHADO À MEDIDA */}
+      {modalConfirmacao.aberto && (
+        <div style={modalOverlayStyle}>
+          <div style={modalBoxStyle}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '10px' }}>⚠️</div>
+            <h3 style={{ margin: '0 0 10px 0', fontSize: '1.2rem', color: 'var(--text-primary)' }}>Confirmar Eliminação</h3>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: '25px', fontSize: '0.95rem', lineHeight: '1.4' }}>
+              Tem a certeza que deseja apagar este registo?<br/>Esta ação não pode ser desfeita.
+            </p>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={cancelarApagar} style={{ ...btnSecondary, padding: '12px', flex: 1 }}>Cancelar</button>
+              <button onClick={executarApagar} style={{ ...btnPrimary, backgroundColor: '#ef4444', padding: '12px', flex: 1 }}>Apagar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
         .loading { display: flex; justify-content: center; align-items: center; height: 100vh; background: var(--bg-color); color: var(--primary-color); }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes modalFadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
       `}</style>
     </div>
   );
@@ -412,7 +442,7 @@ const btnPrimary: React.CSSProperties = {
 };
 
 const btnSecondary: React.CSSProperties = {
-  width: '100%', padding: '15px', backgroundColor: 'transparent', color: 'var(--primary-color)', border: '2px solid var(--primary-color)', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer'
+  width: '100%', padding: '15px', backgroundColor: 'transparent', color: 'var(--text-primary)', border: '2px solid var(--border-color)', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer'
 };
 
 const btnCard: React.CSSProperties = {
@@ -425,4 +455,17 @@ const inputStyle: React.CSSProperties = {
 
 const labelStyle: React.CSSProperties = {
   display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: 'bold'
+};
+
+// Estilos para o Modal de Confirmação
+const modalOverlayStyle: React.CSSProperties = {
+  position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', 
+  backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(3px)',
+  display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000
+};
+
+const modalBoxStyle: React.CSSProperties = {
+  backgroundColor: 'var(--surface-color)', padding: '25px', borderRadius: '16px', 
+  width: '85%', maxWidth: '350px', textAlign: 'center', 
+  border: '1px solid var(--border-color)', animation: 'modalFadeIn 0.2s ease-out'
 };
