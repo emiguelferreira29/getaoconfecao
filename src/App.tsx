@@ -49,8 +49,8 @@ export default function App() {
   const [editandoPrecoId, setEditandoPrecoId] = useState<number | null>(null);
   const [precoEditado, setPrecoEditado] = useState<string>('');
 
-  // Estados para o Modal de Confirmação
-  const [modalConfirmacao, setModalConfirmacao] = useState<{ aberto: boolean; tipo: 'saida' | 'artigo' | null; idParaApagar: number | null }>({ aberto: false, tipo: null, idParaApagar: null });
+  // Estados para o Modal de Confirmação (AGORA SUPORTA LOGOUT)
+  const [modalConfirmacao, setModalConfirmacao] = useState<{ aberto: boolean; tipo: 'saida' | 'artigo' | 'logout' | null; idParaApagar: number | null }>({ aberto: false, tipo: null, idParaApagar: null });
 
   // Só carrega os dados da base de dados se o utilizador já tiver feito login
   useEffect(() => {
@@ -99,12 +99,8 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    const confirmar = window.confirm('Tem a certeza que deseja terminar a sessão?');
-    if (confirmar) {
-      setAutenticado(false);
-      localStorage.removeItem('autenticadoConfecao');
-      setEcraAtual('home');
-    }
+    // Agora chama o nosso Modal em vez do alerta do navegador!
+    setModalConfirmacao({ aberto: true, tipo: 'logout', idParaApagar: null });
   };
 
   // --- LÓGICA DE REGISTO E EDIÇÃO ---
@@ -182,27 +178,36 @@ export default function App() {
     }
   };
 
-  // FUNÇÕES DE ELIMINAÇÃO
+  // FUNÇÕES DO MODAL UNIFICADO (Apagar e Sair)
   const pedirConfirmacaoApagar = (id: number, tipo: 'saida' | 'artigo') => {
     setModalConfirmacao({ aberto: true, tipo, idParaApagar: id });
   };
 
-  const cancelarApagar = () => {
+  const cancelarModal = () => {
     setModalConfirmacao({ aberto: false, tipo: null, idParaApagar: null });
   };
 
-  const executarApagar = async () => {
+  const executarAcaoModal = async () => {
     const { idParaApagar, tipo } = modalConfirmacao;
-    if (!idParaApagar || !tipo) return;
+    if (!tipo) return;
 
-    if (tipo === 'saida') {
+    // Se a ação for LOGOUT
+    if (tipo === 'logout') {
+      setAutenticado(false);
+      localStorage.removeItem('autenticadoConfecao');
+      setEcraAtual('home');
+    } 
+    // Se a ação for APAGAR SAÍDA
+    else if (tipo === 'saida' && idParaApagar) {
       const { error } = await supabase.from('saidas').delete().eq('id', idParaApagar);
       if (error) {
         alert(`Erro ao apagar saída: ${error.message}`);
       } else {
         setSaidas(saidas.filter(saida => saida.id !== idParaApagar));
       }
-    } else if (tipo === 'artigo') {
+    } 
+    // Se a ação for APAGAR ARTIGO
+    else if (tipo === 'artigo' && idParaApagar) {
       const { error } = await supabase.from('artigos').delete().eq('id', idParaApagar);
       if (error) {
         alert(`Erro ao apagar artigo: ${error.message}`);
@@ -211,6 +216,7 @@ export default function App() {
       }
     }
     
+    // Fecha o modal após qualquer ação
     setModalConfirmacao({ aberto: false, tipo: null, idParaApagar: null });
   };
 
@@ -242,7 +248,7 @@ export default function App() {
   return (
     <div style={{ maxWidth: '600px', margin: '0 auto', minHeight: '100vh', position: 'relative' }}>
       
-      {/* CABEÇALHO ATUALIZADO COM BOTÃO DE SAÍDA */}
+      {/* CABEÇALHO */}
       <header style={{ padding: '20px', backgroundColor: 'var(--surface-color)', borderBottom: '1px solid var(--border-color)', position: 'sticky', top: 0, zIndex: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <img src="/logo.png" alt="Logótipo" style={{ height: '35px', width: '35px', objectFit: 'contain', borderRadius: '8px' }} />
@@ -492,19 +498,39 @@ export default function App() {
         )}
       </main>
 
-      {/* MODAL DE CONFIRMAÇÃO DESENHADO À MEDIDA */}
+      {/* MODAL DE CONFIRMAÇÃO INTELIGENTE (Apagar ou Logout) */}
       {modalConfirmacao.aberto && (
         <div style={modalOverlayStyle}>
           <div style={modalBoxStyle}>
-            <div style={{ fontSize: '2.5rem', marginBottom: '10px' }}>⚠️</div>
-            <h3 style={{ margin: '0 0 10px 0', fontSize: '1.2rem', color: 'var(--text-primary)' }}>Confirmar Eliminação</h3>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: '25px', fontSize: '0.95rem', lineHeight: '1.4' }}>
-              Tem a certeza que deseja apagar este registo?<br/>Esta ação não pode ser desfeita.
-            </p>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button onClick={cancelarApagar} style={{ ...btnSecondary, padding: '12px', flex: 1 }}>Cancelar</button>
-              <button onClick={executarApagar} style={{ ...btnPrimary, backgroundColor: '#ef4444', padding: '12px', flex: 1 }}>Apagar</button>
+            
+            <div style={{ fontSize: '2.5rem', marginBottom: '10px' }}>
+              {modalConfirmacao.tipo === 'logout' ? '🚪' : '⚠️'}
             </div>
+            
+            <h3 style={{ margin: '0 0 10px 0', fontSize: '1.2rem', color: 'var(--text-primary)' }}>
+              {modalConfirmacao.tipo === 'logout' ? 'Terminar Sessão' : 'Confirmar Eliminação'}
+            </h3>
+            
+            <p style={{ color: 'var(--text-secondary)', marginBottom: '25px', fontSize: '0.95rem', lineHeight: '1.4' }}>
+              {modalConfirmacao.tipo === 'logout' ? (
+                'Tem a certeza que deseja sair da sua conta?'
+              ) : (
+                <>Tem a certeza que deseja apagar este registo?<br/>Esta ação não pode ser desfeita.</>
+              )}
+            </p>
+            
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={cancelarModal} style={{ ...btnSecondary, padding: '12px', flex: 1 }}>Cancelar</button>
+              
+              <button onClick={executarAcaoModal} style={{ 
+                ...btnPrimary, 
+                backgroundColor: modalConfirmacao.tipo === 'logout' ? 'var(--primary-color)' : '#ef4444', 
+                padding: '12px', flex: 1 
+              }}>
+                {modalConfirmacao.tipo === 'logout' ? 'Sair' : 'Apagar'}
+              </button>
+            </div>
+
           </div>
         </div>
       )}
