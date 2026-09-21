@@ -9,23 +9,22 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
-        name: 'Gestão de Confeção',
+        name: 'Confeção',
         short_name: 'Confeção',
-        description: 'App de controlo de peças e faturação',
-        theme_color: '#121212',
-        background_color: '#121212',
-        display: 'standalone',
-        orientation: 'portrait',
+        theme_color: '#ffffff',
         icons: [
           {
-            // Ícone temporário para permitir a instalação
-            src: 'https://cdn-icons-png.flaticon.com/512/3264/3264023.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'any maskable',
+            src: '/logo.png',
+            sizes: '192x192',
+            type: 'image/png'
           },
-        ],
-      },
+          {
+            src: '/logo.png',
+            sizes: '512x512',
+            type: 'image/png'
+          }
+        ]
+      }
     }),
   ],
 });
