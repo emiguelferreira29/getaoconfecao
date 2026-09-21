@@ -7,7 +7,7 @@ import './index.css';
 
 // COMPONENTES IMPORTADOS
 import Login from './components/Login';
-import { ModalAlerta, ModalConfirmacao, btnPrimary, btnSecondary, btnCard, inputStyle, labelStyle, modalOverlayStyle, modalBoxStyle } from './components/Modais';
+import { ModalAlerta, ModalConfirmacao, btnPrimary, btnSecondary, btnCard, inputStyle, labelStyle } from './components/Modais';
 import type { TipoModalConfirmacao } from './components/Modais';
 
 // PÁGINAS IMPORTADAS
@@ -260,7 +260,6 @@ export default function App() {
     doc.save(`${grupo.lote_id}${comPrecos ? '_INTERNO' : '_CLIENTE'}.pdf`);
   };
 
-  // --- INTERFACE (UI) ---
   if (!autenticado) {
     return (
       <>
@@ -310,7 +309,7 @@ export default function App() {
           </div>
         )}
 
-        {/* PÁGINAS RENDERIZADAS A PARTIR DOS NOVOS COMPONENTES */}
+        {/* PÁGINAS RENDERIZADAS A PARTIR DOS COMPONENTES */}
         {ecraAtual === 'novo_produto' && (
           <NovoProduto setEcraAtual={setEcraAtual} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} />
         )}
@@ -319,10 +318,7 @@ export default function App() {
           <Catalogo artigos={artigos} carregarDados={carregarDados} pedirConfirmacaoApagar={pedirConfirmacaoApagar} />
         )}
 
-        {/* ======================================================= */}
-        {/* O RESTO DOS ECRÃS CONTINUAM AQUI (VAMOS DIVIDIR A SEGUIR) */}
-        {/* ======================================================= */}
-        
+        {/* O RESTO DOS ECRÃS */}
         {ecraAtual === 'encomendas_pendentes' && (
           <div style={{ animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Encomendas por Entregar</h2>
