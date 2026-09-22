@@ -83,7 +83,6 @@ export default function NovaEncomenda({ artigos, setEcraAtual, carregarDados, mo
     let possivelOP = '';
     let clientePossivel = '';
     let somaQuantidades = 0;
-    const itensEncontrados: ItemNovaOp[] = [];
 
     // Procurar "ORDEM DE PRODUÇÃO: 12888.1"
     const matchOp = texto.match(/ORDEM DE PRODU[ÇC][AÃ]O[:\s]*([A-Z0-9.-]+)/i) || texto.match(/OP[-\s]?([A-Z0-9.-]+)/i);
