@@ -22,7 +22,7 @@ import Expedicao from './pages/Expedicao';
 export type Artigo = { id: number; codigo: string; nome: string; preco: number; };
 export type Saida = { id: number; artigo_codigo: string; artigo_nome: string; quantidade: number; total_faturado: number; data: string; op_numero: string; tamanho: string; lote_id: string | null; };
 export type ItemExpedicao = { artigo_codigo: string; artigo_nome: string; quantidade: number; total_faturado: number; op_numero: string; tamanho: string; };
-export type Encomenda = { id: number; op_numero: string; artigo_codigo: string; artigo_nome: string; quantidade_pedida: number; estado: string; data_entrega?: string | null; };
+export type Encomenda = { id: number; op_numero: string; artigo_codigo: string; artigo_nome: string; quantidade_pedida: number; estado: string; data_entrega?: string | null; cliente_final?: string | null; };
 export type Ecra = 'home' | 'catalogo' | 'novo_produto' | 'resumo_expedicao' | 'scanner' | 'formulario_saida' | 'relatorio' | 'nova_encomenda' | 'escolher_expedicao' | 'encomendas_pendentes' | 'encomendas_concluidas';
 
 export default function App() {
@@ -83,7 +83,6 @@ export default function App() {
     else { setEcraAtual('home'); }
   };
 
-  // MÉTODOS DE MODAIS E DADOS
   const pedirConfirmacaoApagar = (id: number, tipo: 'saida' | 'artigo') => { setModalConfirmacao({ aberto: true, tipo, idParaApagar: id }); };
   const pedirConfirmacaoApagarLoteInteiro = (lote_id: string) => { setModalConfirmacao({ aberto: true, tipo: 'lote_inteiro', idParaApagar: lote_id }); };
   const pedirConfirmacaoApagarEncomenda = (op_numero: string) => { setModalConfirmacao({ aberto: true, tipo: 'encomenda_inteira', idParaApagar: op_numero }); };
@@ -127,12 +126,7 @@ export default function App() {
         canvas.width = img.width;
         canvas.height = img.height;
         const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0);
-          resolve(canvas.toDataURL('image/png'));
-        } else {
-          resolve('');
-        }
+        if (ctx) { ctx.drawImage(img, 0, 0); resolve(canvas.toDataURL('image/png')); } else { resolve(''); }
       };
       img.onerror = () => resolve('');
     });
@@ -143,30 +137,15 @@ export default function App() {
 
     try {
       const logoBase64 = await carregarImagemBase64('/logo.png');
-      if (logoBase64) {
-        doc.addImage(logoBase64, 'PNG', 14, 10, 22, 22);
-      }
-    } catch (err) {
-      console.warn('Erro ao carregar logótipo no PDF:', err);
-    }
+      if (logoBase64) { doc.addImage(logoBase64, 'PNG', 14, 10, 22, 22); }
+    } catch (err) { console.warn('Erro ao carregar logótipo no PDF:', err); }
 
-    doc.setFontSize(16);
-    doc.setTextColor(37, 99, 235);
-    doc.text(`Nota de Expedição: ${grupo.lote_id}`, 40, 18);
-
+    doc.setFontSize(16); doc.setTextColor(37, 99, 235); doc.text(`Nota de Expedição: ${grupo.lote_id}`, 40, 18);
     const dataLote = grupo.data ? new Date(grupo.data) : new Date();
+    doc.setFontSize(10); doc.setTextColor(100); doc.text(`Data e Hora: ${dataLote.toLocaleString('pt-PT')}`, 40, 25);
 
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.text(`Data e Hora: ${dataLote.toLocaleString('pt-PT')}`, 40, 25);
-
-    if (comPrecos) {
-      doc.setTextColor(220, 38, 38);
-      doc.text('DOCUMENTO INTERNO - COM VALORES', 40, 31);
-    } else {
-      doc.setTextColor(0);
-      doc.text('DOCUMENTO DE ACOMPANHAMENTO DE MERCADORIA', 40, 31);
-    }
+    if (comPrecos) { doc.setTextColor(220, 38, 38); doc.text('DOCUMENTO INTERNO - COM VALORES', 40, 31); } 
+    else { doc.setTextColor(0); doc.text('DOCUMENTO DE ACOMPANHAMENTO DE MERCADORIA', 40, 31); }
 
     const colunas = comPrecos 
       ? ['Referência / Artigo', 'Ordem Prod. (OP)', 'Tamanho', 'Qtd', 'Total EUR'] 
@@ -177,39 +156,20 @@ export default function App() {
       : [`${i.artigo_codigo} - ${i.artigo_nome}`, i.op_numero, i.tamanho || '---', i.quantidade.toString()]
     );
 
-    autoTable(doc, { 
-      startY: 38, 
-      head: [colunas], 
-      body: linhas, 
-      theme: 'grid', 
-      headStyles: { fillColor: [37, 99, 235] }, 
-      styles: { fontSize: 10, cellPadding: 4 } 
-    });
+    autoTable(doc, { startY: 38, head: [colunas], body: linhas, theme: 'grid', headStyles: { fillColor: [37, 99, 235] }, styles: { fontSize: 10, cellPadding: 4 } });
 
     const totalQtd = grupo.itens.reduce((acc: number, i: Saida) => acc + Number(i.quantidade), 0);
     let finalY = (doc as any).lastAutoTable.finalY + 12;
 
-    doc.setFontSize(11);
-    doc.setTextColor(0);
-    doc.text(`Total de Peças Expedidas: ${totalQtd} un.`, 14, finalY);
+    doc.setFontSize(11); doc.setTextColor(0); doc.text(`Total de Peças Expedidas: ${totalQtd} un.`, 14, finalY);
 
     if (comPrecos) {
-      finalY += 7;
-      doc.setFontSize(12);
-      doc.setTextColor(37, 99, 235);
-      doc.text(`Faturação Total do Lote: ${Number(grupo.total_faturado).toFixed(2)} EUR`, 14, finalY);
+      finalY += 7; doc.setFontSize(12); doc.setTextColor(37, 99, 235); doc.text(`Faturação Total do Lote: ${Number(grupo.total_faturado).toFixed(2)} EUR`, 14, finalY);
     }
 
     finalY += 15;
-    const dataExtenso = dataLote.toLocaleDateString('pt-PT', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
-    });
-
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.text(`Documento emitido a ${dataExtenso}.`, 14, finalY);
+    const dataExtenso = dataLote.toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' });
+    doc.setFontSize(10); doc.setTextColor(100); doc.text(`Documento emitido a ${dataExtenso}.`, 14, finalY);
 
     doc.save(`${grupo.lote_id}${comPrecos ? '_INTERNO' : '_CLIENTE'}.pdf`);
   };
@@ -227,22 +187,15 @@ export default function App() {
 
   return (
     <div style={{ maxWidth: '600px', margin: '0 auto', minHeight: '100vh', position: 'relative' }}>
-      
       <header style={{ padding: '20px', backgroundColor: 'var(--surface-color)', borderBottom: '1px solid var(--border-color)', position: 'sticky', top: 0, zIndex: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <img src="/logo.png" alt="Logótipo" style={{ height: '35px', width: '35px', objectFit: 'contain', borderRadius: '8px' }} />
-          <h1 style={{ fontSize: '1.2rem', margin: 0, color: 'var(--primary-color)' }}>Confeção</h1>
-        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><img src="/logo.png" alt="Logótipo" style={{ height: '35px', width: '35px', objectFit: 'contain', borderRadius: '8px' }} /><h1 style={{ fontSize: '1.2rem', margin: 0, color: 'var(--primary-color)' }}>Confeção</h1></div>
         <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-          {ecraAtual !== 'home' && (
-            <button onClick={handleVoltar} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.9rem' }}>◀ Voltar</button>
-          )}
+          {ecraAtual !== 'home' && <button onClick={handleVoltar} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.9rem' }}>◀ Voltar</button>}
           <button onClick={handleLogout} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.4rem' }} title="Terminar Sessão">🚪</button>
         </div>
       </header>
 
       <main style={{ padding: '20px', paddingBottom: '90px' }}>
-        
         {ecraAtual === 'home' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', animation: 'fadeIn 0.3s' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '10px' }}>Painel Principal</h2>
@@ -263,56 +216,20 @@ export default function App() {
           </div>
         )}
 
-        {/* PÁGINAS MODULARES */}
-        {ecraAtual === 'novo_produto' && (
-          <NovoProduto setEcraAtual={setEcraAtual} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} />
-        )}
-
-        {ecraAtual === 'catalogo' && (
-          <Catalogo artigos={artigos} carregarDados={carregarDados} pedirConfirmacaoApagar={pedirConfirmacaoApagar} />
-        )}
-
-        {ecraAtual === 'nova_encomenda' && (
-          <NovaEncomenda artigos={artigos} setEcraAtual={setEcraAtual} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} />
-        )}
-
-        {ecraAtual === 'encomendas_pendentes' && (
-          <EncomendasPendentes encomendas={encomendas} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} pedirConfirmacaoApagarEncomenda={pedirConfirmacaoApagarEncomenda} />
-        )}
-
-        {ecraAtual === 'encomendas_concluidas' && (
-          <EncomendasConcluidas encomendas={encomendas} saidas={saidas} agruparSaidas={agruparSaidas} gerarPDF={gerarPDF} pedirConfirmacaoApagarEncomenda={pedirConfirmacaoApagarEncomenda} />
-        )}
-
-        {ecraAtual === 'relatorio' && (
-          <Relatorio saidas={saidas} agruparSaidas={agruparSaidas} gerarPDF={gerarPDF} pedirConfirmacaoApagarLoteInteiro={pedirConfirmacaoApagarLoteInteiro} pedirConfirmacaoApagar={pedirConfirmacaoApagar} />
-        )}
-
-        {/* FLUXO DE EXPEDIÇÃO */}
+        {ecraAtual === 'novo_produto' && <NovoProduto setEcraAtual={setEcraAtual} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} />}
+        {ecraAtual === 'catalogo' && <Catalogo artigos={artigos} carregarDados={carregarDados} pedirConfirmacaoApagar={pedirConfirmacaoApagar} />}
+        {ecraAtual === 'nova_encomenda' && <NovaEncomenda artigos={artigos} setEcraAtual={setEcraAtual} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} />}
+        {ecraAtual === 'encomendas_pendentes' && <EncomendasPendentes encomendas={encomendas} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} pedirConfirmacaoApagarEncomenda={pedirConfirmacaoApagarEncomenda} />}
+        {ecraAtual === 'encomendas_concluidas' && <EncomendasConcluidas encomendas={encomendas} saidas={saidas} agruparSaidas={agruparSaidas} gerarPDF={gerarPDF} pedirConfirmacaoApagarEncomenda={pedirConfirmacaoApagarEncomenda} />}
+        {ecraAtual === 'relatorio' && <Relatorio saidas={saidas} agruparSaidas={agruparSaidas} gerarPDF={gerarPDF} pedirConfirmacaoApagarLoteInteiro={pedirConfirmacaoApagarLoteInteiro} pedirConfirmacaoApagar={pedirConfirmacaoApagar} />}
+        
         {['escolher_expedicao', 'resumo_expedicao', 'scanner', 'formulario_saida'].includes(ecraAtual) && (
-          <Expedicao
-            ecraAtual={ecraAtual}
-            setEcraAtual={setEcraAtual}
-            artigos={artigos}
-            saidas={saidas}
-            encomendas={encomendas}
-            carregarDados={carregarDados}
-            mostrarAlerta={mostrarAlerta}
-            listaExpedicao={listaExpedicao}
-            setListaExpedicao={setListaExpedicao}
-            modoExpedicao={modoExpedicao}
-            setModoExpedicao={setModoExpedicao}
-            opSelecionada={opSelecionada}
-            setOpSelecionada={setOpSelecionada}
-          />
+          <Expedicao ecraAtual={ecraAtual} setEcraAtual={setEcraAtual} artigos={artigos} saidas={saidas} encomendas={encomendas} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} listaExpedicao={listaExpedicao} setListaExpedicao={setListaExpedicao} modoExpedicao={modoExpedicao} setModoExpedicao={setModoExpedicao} opSelecionada={opSelecionada} setOpSelecionada={setOpSelecionada} />
         )}
-
       </main>
 
-      {/* ALERTAS E MODAIS */}
       <ModalAlerta visivel={alerta.visivel} titulo={alerta.titulo} mensagem={alerta.mensagem} tipo={alerta.tipo} onFechar={fecharAlerta} />
       <ModalConfirmacao aberto={modalConfirmacao.aberto} tipo={modalConfirmacao.tipo} onCancelar={cancelarModal} onConfirmar={executarAcaoModal} />
-
     </div>
   );
 }

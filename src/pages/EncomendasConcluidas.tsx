@@ -12,9 +12,9 @@ type Props = {
 export default function EncomendasConcluidas({ encomendas, saidas, agruparSaidas, gerarPDF, pedirConfirmacaoApagarEncomenda }: Props) {
   
   const agruparEncomendasConcluidas = () => {
-    const grupos: Record<string, { op_numero: string; itens: Encomenda[] }> = {};
+    const grupos: Record<string, { op_numero: string; cliente_final: string | null; itens: Encomenda[] }> = {};
     encomendas.filter(e => e.estado === 'concluida').forEach(enc => { 
-      if (!grupos[enc.op_numero]) grupos[enc.op_numero] = { op_numero: enc.op_numero, itens: [] }; 
+      if (!grupos[enc.op_numero]) grupos[enc.op_numero] = { op_numero: enc.op_numero, cliente_final: enc.cliente_final || null, itens: [] }; 
       grupos[enc.op_numero].itens.push(enc); 
     });
     return Object.values(grupos);
@@ -35,7 +35,10 @@ export default function EncomendasConcluidas({ encomendas, saidas, agruparSaidas
             return (
               <div key={grupo.op_numero} style={{ backgroundColor: 'var(--surface-color)', border: `1px solid var(--border-color)`, borderRadius: '12px', overflow: 'hidden', opacity: 0.85 }}>
                 <div style={{ padding: '15px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <strong style={{ fontSize: '1.2rem', color: '#22c55e' }}>✅ {grupo.op_numero}</strong>
+                  <div>
+                    <strong style={{ fontSize: '1.2rem', color: '#22c55e', display: 'block' }}>✅ {grupo.op_numero}</strong>
+                    {grupo.cliente_final && <small style={{ color: 'var(--text-secondary)' }}>👤 {grupo.cliente_final}</small>}
+                  </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Finalizada</span>
                     <button onClick={() => pedirConfirmacaoApagarEncomenda(grupo.op_numero)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.2rem', padding: '0 5px' }} title="Apagar OP">🗑️</button>

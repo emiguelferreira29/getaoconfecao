@@ -16,9 +16,9 @@ export default function EncomendasPendentes({ encomendas, carregarDados, mostrar
   const [editOpQuantidades, setEditOpQuantidades] = useState<Record<number, number>>({});
 
   const agruparEncomendasPendentes = () => {
-    const grupos: Record<string, { op_numero: string; data_entrega: string | null; itens: Encomenda[] }> = {};
+    const grupos: Record<string, { op_numero: string; data_entrega: string | null; cliente_final: string | null; itens: Encomenda[] }> = {};
     encomendas.filter(e => e.estado === 'pendente').forEach(enc => { 
-      if (!grupos[enc.op_numero]) grupos[enc.op_numero] = { op_numero: enc.op_numero, data_entrega: enc.data_entrega || null, itens: [] }; 
+      if (!grupos[enc.op_numero]) grupos[enc.op_numero] = { op_numero: enc.op_numero, data_entrega: enc.data_entrega || null, cliente_final: enc.cliente_final || null, itens: [] }; 
       grupos[enc.op_numero].itens.push(enc); 
     });
     return Object.values(grupos).sort((a, b) => { 
@@ -53,11 +53,8 @@ export default function EncomendasPendentes({ encomendas, carregarDados, mostrar
         if (error) throw error;
       }
       mostrarAlerta('Sucesso', `A ${op_numero} foi atualizada!`, 'sucesso'); 
-      setEditandoOpId(null); 
-      carregarDados();
-    } catch (err: any) { 
-      mostrarAlerta('Erro ao atualizar', err.message, 'erro'); 
-    }
+      setEditandoOpId(null); carregarDados();
+    } catch (err: any) { mostrarAlerta('Erro ao atualizar', err.message, 'erro'); }
   };
 
   const gruposPendentes = agruparEncomendasPendentes();
@@ -72,7 +69,10 @@ export default function EncomendasPendentes({ encomendas, carregarDados, mostrar
             return (
               <div key={grupo.op_numero} style={{ backgroundColor: 'var(--surface-color)', border: `2px solid ${status.corBorda}`, borderRadius: '12px', overflow: 'hidden' }}>
                 <div style={{ padding: '15px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.02)' }}>
-                  <strong style={{ fontSize: '1.2rem' }}>{grupo.op_numero}</strong>
+                  <div>
+                    <strong style={{ fontSize: '1.2rem', display: 'block' }}>{grupo.op_numero}</strong>
+                    {grupo.cliente_final && <small style={{ color: 'var(--text-secondary)' }}>👤 {grupo.cliente_final}</small>}
+                  </div>
                   <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                     <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{status.icone} {status.texto}</div>
                     {editandoOpId !== grupo.op_numero && (

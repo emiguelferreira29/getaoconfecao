@@ -32,17 +32,16 @@ export default function Expedicao({
   const [formQtd, setFormQtd] = useState('');
 
   const obterOportunidadesPendentes = () => {
-    const ops = encomendas.filter(e => e.estado === 'pendente').map(e => e.op_numero);
-    return Array.from(new Set(ops));
+    const opsMap = new Map<string, string | null>();
+    encomendas.filter(e => e.estado === 'pendente').forEach(e => opsMap.set(e.op_numero, e.cliente_final || null));
+    return Array.from(opsMap.entries()).map(([op, cliente]) => ({ op, cliente }));
   };
 
   const obterQtdFaltanteItem = (artigoCodigo: string) => {
     if (modoExpedicao !== 'op' || !opSelecionada) return null;
     const enc = encomendas.find(e => e.op_numero === opSelecionada && e.artigo_codigo === artigoCodigo);
     if (!enc) return null;
-    const qtdLida = listaExpedicao
-      .filter(l => l.artigo_codigo === artigoCodigo)
-      .reduce((sum, curr) => sum + curr.quantidade, 0);
+    const qtdLida = listaExpedicao.filter(l => l.artigo_codigo === artigoCodigo).reduce((sum, curr) => sum + curr.quantidade, 0);
     const falta = enc.quantidade_pedida - qtdLida;
     return falta > 0 ? falta : 0;
   };
@@ -61,9 +60,7 @@ export default function Expedicao({
     if (modoExpedicao === 'op' && opSelecionada) {
       const pendentesOp = encomendas.filter(e => e.op_numero === opSelecionada);
       const itemPendente = pendentesOp.find(enc => {
-        const qtdLida = listaExpedicao
-          .filter(l => l.artigo_codigo === enc.artigo_codigo)
-          .reduce((sum, curr) => sum + curr.quantidade, 0);
+        const qtdLida = listaExpedicao.filter(l => l.artigo_codigo === enc.artigo_codigo).reduce((sum, curr) => sum + curr.quantidade, 0);
         return enc.quantidade_pedida - qtdLida > 0;
       });
 
@@ -73,18 +70,9 @@ export default function Expedicao({
           setArtigoSelecionado(art);
           const falta = obterQtdFaltanteItem(art.codigo);
           setFormQtd(falta !== null && falta > 0 ? falta.toString() : '');
-        } else {
-          setArtigoSelecionado(null);
-          setFormQtd('');
-        }
-      } else {
-        setArtigoSelecionado(null);
-        setFormQtd('');
-      }
-    } else {
-      setArtigoSelecionado(null);
-      setFormQtd('');
-    }
+        } else { setArtigoSelecionado(null); setFormQtd(''); }
+      } else { setArtigoSelecionado(null); setFormQtd(''); }
+    } else { setArtigoSelecionado(null); setFormQtd(''); }
     setEcraAtual('formulario_saida');
   };
 
@@ -93,9 +81,7 @@ export default function Expedicao({
     setArtigoSelecionado(art);
     if (art && modoExpedicao === 'op' && opSelecionada) {
       const falta = obterQtdFaltanteItem(art.codigo);
-      if (falta !== null && falta > 0) {
-        setFormQtd(falta.toString());
-      }
+      if (falta !== null && falta > 0) setFormQtd(falta.toString());
     }
   };
 
@@ -124,36 +110,24 @@ export default function Expedicao({
     if (isNaN(qtdNum) || qtdNum <= 0) return;
     const opAUsar = modoExpedicao === 'op' ? opSelecionada : formOP;
     const novoItem: ItemExpedicao = { 
-      artigo_codigo: artigoSelecionado.codigo, 
-      artigo_nome: artigoSelecionado.nome, 
-      quantidade: qtdNum, 
-      total_faturado: qtdNum * artigoSelecionado.preco, 
-      op_numero: opAUsar, 
-      tamanho: formTamanho 
+      artigo_codigo: artigoSelecionado.codigo, artigo_nome: artigoSelecionado.nome, 
+      quantidade: qtdNum, total_faturado: qtdNum * artigoSelecionado.preco, 
+      op_numero: opAUsar, tamanho: formTamanho 
     };
     setListaExpedicao([...listaExpedicao, novoItem]); 
     setFormQtd(''); setArtigoSelecionado(null); setEcraAtual('resumo_expedicao');
   };
 
-  const removerDoLoteTemporario = (index: number) => { 
-    const novaLista = [...listaExpedicao]; 
-    novaLista.splice(index, 1); 
-    setListaExpedicao(novaLista); 
-  };
+  const removerDoLoteTemporario = (index: number) => { const novaLista = [...listaExpedicao]; novaLista.splice(index, 1); setListaExpedicao(novaLista); };
 
   const finalizarExpedicao = async () => {
     if (listaExpedicao.length === 0) return;
-    const hoje = new Date(); 
-    const dia = hoje.getDate().toString().padStart(2, '0'); 
-    const mes = (hoje.getMonth() + 1).toString().padStart(2, '0');
+    const hoje = new Date(); const dia = hoje.getDate().toString().padStart(2, '0'); const mes = (hoje.getMonth() + 1).toString().padStart(2, '0');
     const prefixo = `Expedição ${dia}${mes}${hoje.getFullYear()}-`;
 
     const lotesDeHoje = saidas.map(s => s.lote_id).filter(id => id && id.startsWith(prefixo)) as string[];
     let maxNum = 0;
-    Array.from(new Set(lotesDeHoje)).forEach(lote => { 
-      const num = parseInt(lote.split('-')[1]); 
-      if (!isNaN(num) && num > maxNum) maxNum = num; 
-    });
+    Array.from(new Set(lotesDeHoje)).forEach(lote => { const num = parseInt(lote.split('-')[1]); if (!isNaN(num) && num > maxNum) maxNum = num; });
 
     const novoLoteId = `${prefixo}${maxNum + 1}`;
     const dadosParaInserir = listaExpedicao.map(item => ({ ...item, lote_id: novoLoteId }));
@@ -187,7 +161,9 @@ export default function Expedicao({
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '15px' }}>O sistema ajuda a controlar as quantidades exatas que faltam entregar.</p>
             <select value={opSelecionada} onChange={e => setOpSelecionada(e.target.value)} style={{...inputStyle, marginBottom: '15px'}}>
               <option value="" disabled>Selecione a OP pendente...</option>
-              {obterOportunidadesPendentes().map(op => <option key={op} value={op}>{op}</option>)}
+              {obterOportunidadesPendentes().map(opData => (
+                <option key={opData.op} value={opData.op}>{opData.op} {opData.cliente ? `(${opData.cliente})` : ''}</option>
+              ))}
             </select>
             <button onClick={iniciarExpedicaoOP} style={btnPrimary}>Iniciar Expedição Desta OP</button>
           </div>
