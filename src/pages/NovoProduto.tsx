@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { supabase } from '../supabase';
 import { btnPrimary, inputStyle, labelStyle } from '../components/Modais';
 
@@ -12,21 +12,29 @@ export default function NovoProduto({ setEcraAtual, carregarDados, mostrarAlerta
   const [novoCod, setNovoCod] = useState('');
   const [novoNome, setNovoNome] = useState('');
   const [novoPreco, setNovoPreco] = useState('');
+  const [novoCustoSub, setNovoCustoSub] = useState('');
 
   const registarNovoProduto = async (e: React.FormEvent) => {
     e.preventDefault();
     const precoNum = parseFloat(novoPreco.replace(',', '.'));
+    const custoSubNum = parseFloat(novoCustoSub.replace(',', '.')) || 0; // Se não colocar nada, fica a zero
+    
     if (!novoCod || !novoNome || isNaN(precoNum)) {
-      return mostrarAlerta('Atenção', 'Preencha todos os campos corretamente.', 'aviso');
+      return mostrarAlerta('Atenção', 'Preencha todos os campos obrigatórios corretamente.', 'aviso');
     }
     
-    const { error } = await supabase.from('artigos').insert({ codigo: novoCod, nome: novoNome, preco: precoNum });
+    const { error } = await supabase.from('artigos').insert({ 
+      codigo: novoCod, 
+      nome: novoNome, 
+      preco: precoNum,
+      custo_subcontratacao: custoSubNum 
+    });
     
     if (error) {
       mostrarAlerta('Erro', error.message, 'erro');
     } else { 
       mostrarAlerta('Sucesso', 'Produto registado!', 'sucesso'); 
-      setNovoCod(''); setNovoNome(''); setNovoPreco(''); 
+      setNovoCod(''); setNovoNome(''); setNovoPreco(''); setNovoCustoSub('');
       carregarDados(); 
       setEcraAtual('catalogo'); 
     }
@@ -45,8 +53,12 @@ export default function NovoProduto({ setEcraAtual, carregarDados, mostrarAlerta
           <input type="text" value={novoNome} onChange={e => setNovoNome(e.target.value)} required style={inputStyle} />
         </div>
         <div>
-          <label style={labelStyle}>Preço Unitário (€)</label>
+          <label style={labelStyle}>Preço de Venda / Faturação (€)</label>
           <input type="number" step="0.01" value={novoPreco} onChange={e => setNovoPreco(e.target.value)} required style={inputStyle} />
+        </div>
+        <div>
+          <label style={labelStyle}>Custo de Subcontratação (€) - Opcional</label>
+          <input type="number" step="0.01" value={novoCustoSub} onChange={e => setNovoCustoSub(e.target.value)} placeholder="0.00" style={inputStyle} />
         </div>
         <button type="submit" style={btnPrimary}>Guardar Produto</button>
       </form>

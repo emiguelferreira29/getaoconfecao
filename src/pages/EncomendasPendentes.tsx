@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { supabase } from '../supabase';
 import { btnPrimary, btnSecondary, inputStyle, labelStyle } from '../components/Modais';
-import type { Encomenda } from '../App';
+import type { Encomenda, Artigo } from '../App';
 
 type Props = {
+  artigos: Artigo[];
   encomendas: Encomenda[];
   carregarDados: () => void;
   mostrarAlerta: (titulo: string, mensagem: string, tipo: 'sucesso'|'erro'|'aviso') => void;
@@ -12,7 +13,7 @@ type Props = {
 };
 
 export default function EncomendasPendentes({ 
-  encomendas, carregarDados, mostrarAlerta, pedirConfirmacaoApagarEncomenda, iniciarExpedicaoDePendente 
+  artigos, encomendas, carregarDados, mostrarAlerta, pedirConfirmacaoApagarEncomenda, iniciarExpedicaoDePendente 
 }: Props) {
   const [editandoOpId, setEditandoOpId] = useState<string | null>(null);
   const [editOpData, setEditOpData] = useState<string>('');
@@ -20,7 +21,7 @@ export default function EncomendasPendentes({
 
   // ESTADOS DO SUBCONTRATO
   const [subcontratandoOpId, setSubcontratandoOpId] = useState<string | null>(null);
-  const [subArtigo, setSubArtigo] = useState('');
+  const [subArtigoNome, setSubArtigoNome] = useState('');
   const [subQtd, setSubQtd] = useState('');
   const [subCusto, setSubCusto] = useState('');
   const [subPessoa, setSubPessoa] = useState('');
@@ -68,13 +69,33 @@ export default function EncomendasPendentes({
     } catch (err: any) { mostrarAlerta('Erro ao atualizar', err.message, 'erro'); }
   };
 
-  // GUARDAR SUBCONTRATO NA BASE DE DADOS
+  // CÁLCULO AUTOMÁTICO DO CUSTO QUANDO MUDA ARTIGO OU QUANTIDADE
+  const handleMudarArtigoSubcontrato = (nomeArt: string) => {
+    setSubArtigoNome(nomeArt);
+    const art = artigos.find(a => a.nome === nomeArt);
+    const qt = parseInt(subQtd);
+    if (art && !isNaN(qt)) {
+      setSubCusto((qt * (art.custo_subcontratacao || 0)).toFixed(2));
+    }
+  };
+
+  const handleMudarQtdSubcontrato = (qtdStr: string) => {
+    setSubQtd(qtdStr);
+    const art = artigos.find(a => a.nome === subArtigoNome);
+    const qt = parseInt(qtdStr);
+    if (art && !isNaN(qt)) {
+      setSubCusto((qt * (art.custo_subcontratacao || 0)).toFixed(2));
+    } else {
+      setSubCusto('');
+    }
+  };
+
   const guardarSubcontrato = async (op_numero: string) => {
-    if (!subArtigo || !subQtd || !subCusto) return mostrarAlerta('Atenção', 'Preencha o artigo, quantidade e custo.', 'aviso');
+    if (!subArtigoNome || !subQtd || !subCusto) return mostrarAlerta('Atenção', 'Preencha o artigo, quantidade e custo.', 'aviso');
     
     const { error } = await supabase.from('subcontratos').insert({
       op_numero,
-      artigo_nome: subArtigo,
+      artigo_nome: subArtigoNome,
       quantidade: parseInt(subQtd),
       custo_total: parseFloat(subCusto.replace(',', '.')),
       subcontratado_a: subPessoa
@@ -85,7 +106,7 @@ export default function EncomendasPendentes({
     } else {
       mostrarAlerta('Sucesso', 'O Custo do subcontrato foi registado e associado a esta OP!', 'sucesso');
       setSubcontratandoOpId(null);
-      setSubArtigo(''); setSubQtd(''); setSubCusto(''); setSubPessoa('');
+      setSubArtigoNome(''); setSubQtd(''); setSubCusto(''); setSubPessoa('');
       carregarDados();
     }
   };
@@ -145,19 +166,31 @@ export default function EncomendasPendentes({
                         </div>
                       ))}
                       
-                      {/* O FORMULÁRIO DE SUBCONTRATAÇÃO APARECE AQUI */}
                       {subcontratandoOpId === grupo.op_numero ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', animation: 'fadeIn 0.2s', marginTop: '15px', backgroundColor: 'rgba(0,0,0,0.2)', padding: '15px', borderRadius: '8px', border: '1px dashed #eab308' }}>
                           <h4 style={{ margin: 0, color: '#eab308' }}>🤝 Registar Subcontratação</h4>
-                          <select value={subArtigo} onChange={e => setSubArtigo(e.target.value)} style={inputStyle}>
+                          
+                          <select value={subArtigoNome} onChange={e => handleMudarArtigoSubcontrato(e.target.value)} style={inputStyle}>
                             <option value="" disabled>Artigo a subcontratar...</option>
                             {grupo.itens.map(item => <option key={item.id} value={item.artigo_nome}>{item.artigo_nome}</option>)}
                           </select>
+                          
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                            <input type="number" min="1" placeholder="Quantidade" value={subQtd} onChange={e => setSubQtd(e.target.value)} style={inputStyle} />
-                            <input type="number" step="0.01" placeholder="Custo Total (€)" value={subCusto} onChange={e => setSubCusto(e.target.value)} style={inputStyle} />
+                            <div>
+                              <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Quantidade</label>
+                              <input type="number" min="1" value={subQtd} onChange={e => handleMudarQtdSubcontrato(e.target.value)} style={inputStyle} />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Custo Total (€)</label>
+                              <input type="number" step="0.01" value={subCusto} onChange={e => setSubCusto(e.target.value)} style={inputStyle} />
+                            </div>
                           </div>
-                          <input type="text" placeholder="Subcontratado a (Nome / Empresa)" value={subPessoa} onChange={e => setSubPessoa(e.target.value)} style={inputStyle} />
+                          
+                          <div>
+                            <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Subcontratado a (Opcional)</label>
+                            <input type="text" placeholder="Nome / Empresa" value={subPessoa} onChange={e => setSubPessoa(e.target.value)} style={inputStyle} />
+                          </div>
+
                           <div style={{ display: 'flex', gap: '10px', marginTop: '5px' }}>
                             <button onClick={() => setSubcontratandoOpId(null)} style={{...btnSecondary, padding: '10px', flex: 1}}>Cancelar</button>
                             <button onClick={() => guardarSubcontrato(grupo.op_numero)} style={{...btnPrimary, backgroundColor: '#eab308', padding: '10px', flex: 1}}>Registar Custo</button>
@@ -166,7 +199,7 @@ export default function EncomendasPendentes({
                       ) : (
                         <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
                           <button onClick={() => iniciarExpedicaoDePendente(grupo.op_numero)} style={{...btnPrimary, padding: '12px', fontSize: '0.95rem', flex: 1}}>📦 Expedir</button>
-                          <button onClick={() => { setSubcontratandoOpId(grupo.op_numero); setEditandoOpId(null); }} style={{...btnPrimary, padding: '12px', fontSize: '0.95rem', backgroundColor: '#eab308', flex: 1}}>🤝 Subcontratar</button>
+                          <button onClick={() => { setSubcontratandoOpId(grupo.op_numero); setEditandoOpId(null); setSubArtigoNome(''); setSubQtd(''); setSubCusto(''); setSubPessoa(''); }} style={{...btnPrimary, padding: '12px', fontSize: '0.95rem', backgroundColor: '#eab308', flex: 1}}>🤝 Subcontratar</button>
                         </div>
                       )}
                     </>

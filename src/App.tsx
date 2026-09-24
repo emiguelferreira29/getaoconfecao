@@ -19,7 +19,7 @@ import Relatorio from './pages/Relatorio';
 import Expedicao from './pages/Expedicao';
 
 // --- TIPOS DE DADOS ---
-export type Artigo = { id: number; codigo: string; nome: string; preco: number; };
+export type Artigo = { id: number; codigo: string; nome: string; preco: number; custo_subcontratacao: number; };
 export type Saida = { id: number; artigo_codigo: string; artigo_nome: string; quantidade: number; total_faturado: number; data: string; op_numero: string; tamanho: string; lote_id: string | null; };
 export type ItemExpedicao = { artigo_codigo: string; artigo_nome: string; quantidade: number; total_faturado: number; op_numero: string; tamanho: string; };
 export type Encomenda = { id: number; op_numero: string; artigo_codigo: string; artigo_nome: string; quantidade_pedida: number; estado: string; data_entrega?: string | null; cliente_final?: string | null; };
@@ -206,7 +206,6 @@ export default function App() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
               <button onClick={() => setEcraAtual('novo_produto')} style={btnSecondary}>➕ Novo Produto</button>
               <button onClick={() => setEcraAtual('catalogo')} style={btnCard}>📋 Catálogo</button>
-              {/* O NOME DO BOTÃO FOI ALTERADO PARA FATURAÇÃO AQUI */}
               <button onClick={() => setEcraAtual('relatorio')} style={{...btnCard, gridColumn: 'span 2'}}>💰 Faturação</button>
             </div>
           </div>
@@ -215,10 +214,8 @@ export default function App() {
         {ecraAtual === 'novo_produto' && <NovoProduto setEcraAtual={setEcraAtual} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} />}
         {ecraAtual === 'catalogo' && <Catalogo artigos={artigos} carregarDados={carregarDados} pedirConfirmacaoApagar={pedirConfirmacaoApagar} />}
         {ecraAtual === 'nova_encomenda' && <NovaEncomenda artigos={artigos} setEcraAtual={setEcraAtual} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} />}
-        {ecraAtual === 'encomendas_pendentes' && <EncomendasPendentes encomendas={encomendas} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} pedirConfirmacaoApagarEncomenda={pedirConfirmacaoApagarEncomenda} iniciarExpedicaoDePendente={iniciarExpedicaoDePendente} />}
+        {ecraAtual === 'encomendas_pendentes' && <EncomendasPendentes artigos={artigos} encomendas={encomendas} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} pedirConfirmacaoApagarEncomenda={pedirConfirmacaoApagarEncomenda} iniciarExpedicaoDePendente={iniciarExpedicaoDePendente} />}
         {ecraAtual === 'encomendas_concluidas' && <EncomendasConcluidas encomendas={encomendas} saidas={saidas} agruparSaidas={agruparSaidas} gerarPDF={gerarPDF} pedirConfirmacaoApagarEncomenda={pedirConfirmacaoApagarEncomenda} />}
-        
-        {/* A PÁGINA RELATÓRIO AGORA RECEBE OS SUBCONTRATOS TAMBÉM */}
         {ecraAtual === 'relatorio' && <Relatorio saidas={saidas} subcontratos={subcontratos} />}
         
         {['escolher_expedicao', 'resumo_expedicao', 'scanner', 'formulario_saida'].includes(ecraAtual) && (
