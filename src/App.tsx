@@ -191,7 +191,7 @@ export default function App() {
       <header style={{ padding: '15px 20px', backgroundColor: 'var(--surface-color)', borderBottom: '1px solid var(--border-color)', position: 'sticky', top: 0, zIndex: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <img src="/logo.png" alt="Logótipo" style={{ height: '32px', width: '32px', objectFit: 'contain', borderRadius: '8px' }} />
-          <h1 style={{ fontSize: '1.2rem', margin: 0, color: 'var(--text-primary)', fontWeight: '600' }}>Confeção</h1>
+          <h1 style={{ fontSize: '1.2rem', margin: 0, color: 'var(--text-primary)', fontWeight: '600' }}>M&J Tailors - Confeção</h1>
         </div>
         <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
           {ecraAtual !== 'home' && (
