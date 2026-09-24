@@ -1,7 +1,6 @@
-import React, { useState, useRef } from 'react';
-import Tesseract from 'tesseract.js';
+import { useState } from 'react';
 import { supabase } from '../supabase';
-import { btnPrimary, btnSecondary, inputStyle, labelStyle } from '../components/Modais';
+import { btnPrimary, inputStyle, labelStyle } from '../components/Modais';
 import type { Artigo } from '../App';
 
 type ItemNovaOp = { artigo: Artigo; quantidade: number; };
@@ -20,22 +19,21 @@ export default function NovaEncomenda({ artigos, setEcraAtual, carregarDados, mo
   const [novaOpLista, setNovaOpLista] = useState<ItemNovaOp[]>([]);
   const [novaOpArtigo, setNovaOpArtigo] = useState<Artigo | null>(null);
   const [novaOpQtd, setNovaOpQtd] = useState('');
-  
-  const [aLerDocumento, setALerDocumento] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const adicionarItemNovaOp = (e: React.FormEvent) => {
     e.preventDefault();
     if (!novaOpArtigo) return mostrarAlerta('Atenção', 'Selecione um artigo.', 'aviso');
     const qtd = parseInt(novaOpQtd);
     if (isNaN(qtd) || qtd <= 0) return mostrarAlerta('Atenção', 'Quantidade inválida.', 'aviso');
+    
     setNovaOpLista([...novaOpLista, { artigo: novaOpArtigo, quantidade: qtd }]);
-    setNovaOpArtigo(null); setNovaOpQtd('');
+    setNovaOpArtigo(null); 
+    setNovaOpQtd('');
   };
 
   const guardarNovaEncomenda = async () => {
     if (!novaOpNumero) return mostrarAlerta('Atenção', 'Indique o número da OP.', 'aviso');
-    if (!novaOpLista || novaOpLista.length === 0) return mostrarAlerta('Atenção', 'Adicione pelo menos um artigo à OP.', 'aviso');
+    if (novaOpLista.length === 0) return mostrarAlerta('Atenção', 'Adicione pelo menos um artigo à OP.', 'aviso');
     
     const dadosParaInserir = novaOpLista.map(item => ({ 
       op_numero: novaOpNumero, 
@@ -58,107 +56,9 @@ export default function NovaEncomenda({ artigos, setEcraAtual, carregarDados, mo
     }
   };
 
-  const handleTirarFoto = () => { if (fileInputRef.current) fileInputRef.current.click(); };
-
-  // --- 1. FUNÇÃO DE PRÉ-PROCESSAMENTO (FILTRO DE SCANNER) ---
-  const otimizarImagemParaOCR = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width = img.width;
-          canvas.height = img.height;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            // Aplica Preto & Branco (grayscale), tira brilho excessivo e duplica o contraste!
-            ctx.filter = 'grayscale(100%) contrast(200%) brightness(110%)';
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            resolve(canvas.toDataURL('image/jpeg', 0.9)); // Devolve um JPEG de alta qualidade otimizado
-          } else {
-            resolve(event.target?.result as string); // Fallback caso o canvas falhe
-          }
-        };
-        img.src = event.target?.result as string;
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  };
-
-  const processarImagem = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setALerDocumento(true);
-    try {
-      // Passar a imagem pelo nosso "Filtro" antes de dar ao Tesseract
-      const imagemOtimizadaBase64 = await otimizarImagemParaOCR(file);
-      
-      const result = await Tesseract.recognize(imagemOtimizadaBase64, 'por');
-      analisarTextoInteligente(result.data.text);
-    } catch (error) {
-      console.error(error);
-      mostrarAlerta('Erro de Leitura', 'Não foi possível analisar a imagem. Tente tirar uma foto mais nítida.', 'erro');
-    } finally {
-      setALerDocumento(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
-
-  // --- 2. REGEX MAIS TOLERANTES E INTELIGENTES ---
-  const analisarTextoInteligente = (texto: string) => {
-    const linhas = texto.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    
-    let possivelOP = '';
-    let clientePossivel = '';
-    let somaQuantidades = 0;
-
-    // Procura OP tolerando gralhas (0 em vez de O, espacos a mais, etc)
-    const matchOp = texto.match(/(?:[O0]RDEM|0RDEM)\s+DE\s+PRODU[CÇQ][AÃ]O[:\s]*([A-Z0-9.-]+)/i) || texto.match(/(?:OP|0P)[-\s]?([A-Z0-9.-]+)/i);
-    if (matchOp) possivelOP = matchOp[1];
-
-    // Procurar Cliente tolerando gralhas (C1iente, Cllente, etc)
-    const matchCliente = texto.match(/C[l1i]+ente[:\s]*(.+)/i);
-    if (matchCliente) clientePossivel = matchCliente[1].trim();
-
-    // Somar as quantidades (Linhas que comecem por número, com espaços e "TA" de TAM/TAW/TAN)
-    linhas.forEach(linha => {
-      // Aceita coisas como "6 TAM-M", "6  TAW-M", "14 TAN-L"
-      const matchQtdLinha = linha.match(/^\s*(\d+)\s*T[A-Z]/i);
-      if (matchQtdLinha) {
-        somaQuantidades += parseInt(matchQtdLinha[1]);
-      }
-    });
-
-    if (possivelOP) setNovaOpNumero(possivelOP);
-    if (clientePossivel) setNovaOpClienteFinal(clientePossivel);
-    
-    if (somaQuantidades > 0) {
-      setNovaOpQtd(somaQuantidades.toString());
-      mostrarAlerta(
-        'Leitura Concluída', 
-        `Foram detetados a OP "${possivelOP || 'Desconhecida'}", o Cliente "${clientePossivel || 'Desconhecido'}" e um total de ${somaQuantidades} peças.\n\nEscolha o Artigo correspondente na lista abaixo e clique em Adicionar.`, 
-        'sucesso'
-      );
-    } else {
-      mostrarAlerta('Aviso', 'A OP e o Cliente podem ter sido lidos, mas não detetámos as quantidades de forma segura. Valide os dados e insira a quantidade manualmente.', 'aviso');
-    }
-  };
-
   return (
     <div style={{ animation: 'fadeIn 0.3s' }}>
-      <h2 style={{ fontSize: '1.5rem', marginBottom: '10px' }}>Nova Encomenda (Entrada)</h2>
-      
-      <div style={{ marginBottom: '25px', backgroundColor: 'var(--surface-color)', padding: '15px', borderRadius: '12px', border: '1px solid var(--primary-color)' }}>
-        <h3 style={{ fontSize: '1.1rem', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}><span>🤖</span> Leitura Automática (OCR)</h3>
-        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '15px' }}>Tire uma foto à folha de obra. O sistema extrai a OP, o Cliente Final e as peças totais.</p>
-        <input type="file" accept="image/*" capture="environment" ref={fileInputRef} onChange={processarImagem} style={{ display: 'none' }} />
-        <button onClick={handleTirarFoto} style={{...btnSecondary, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', backgroundColor: aLerDocumento ? 'var(--bg-color)' : 'transparent'}} disabled={aLerDocumento}>
-          {aLerDocumento ? <span style={{ color: 'var(--primary-color)' }}>A analisar papel (pode demorar)... ⏳</span> : <>📷 Tirar Foto ao Documento</>}
-        </button>
-      </div>
+      <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Nova Encomenda (Entrada)</h2>
 
       <div style={{ marginBottom: '15px' }}>
         <label style={labelStyle}>Número da OP</label>
@@ -190,9 +90,16 @@ export default function NovaEncomenda({ artigos, setEcraAtual, carregarDados, mo
       </div>
 
       <h3 style={{ fontSize: '1.1rem', marginBottom: '10px' }}>Lista da OP ({novaOpLista.length})</h3>
+      {novaOpLista.length === 0 && (
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontStyle: 'italic' }}>A lista está vazia. Adicione artigos acima.</p>
+      )}
+      
       {novaOpLista.map((item, i) => (
         <div key={i} style={{ backgroundColor: 'var(--surface-color)', padding: '12px', borderRadius: '8px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', border: '1px dashed rgba(255,255,255,0.1)' }}>
-          <div><strong style={{ display: 'block', fontSize: '1rem', color: 'var(--primary-color)' }}>{item.quantidade}x</strong><span>{item.artigo.nome}</span></div>
+          <div>
+            <strong style={{ display: 'inline-block', minWidth: '30px', fontSize: '1rem', color: 'var(--primary-color)' }}>{item.quantidade}x</strong>
+            <span>{item.artigo.nome}</span>
+          </div>
           <button onClick={() => setNovaOpLista(novaOpLista.filter((_, index) => index !== i))} style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '1.2rem', cursor: 'pointer' }}>✕</button>
         </div>
       ))}
