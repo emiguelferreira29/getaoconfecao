@@ -8,9 +8,12 @@ type Props = {
   carregarDados: () => void;
   mostrarAlerta: (titulo: string, mensagem: string, tipo: 'sucesso'|'erro'|'aviso') => void;
   pedirConfirmacaoApagarEncomenda: (op_numero: string) => void;
+  iniciarExpedicaoDePendente: (op_numero: string) => void;
 };
 
-export default function EncomendasPendentes({ encomendas, carregarDados, mostrarAlerta, pedirConfirmacaoApagarEncomenda }: Props) {
+export default function EncomendasPendentes({ 
+  encomendas, carregarDados, mostrarAlerta, pedirConfirmacaoApagarEncomenda, iniciarExpedicaoDePendente 
+}: Props) {
   const [editandoOpId, setEditandoOpId] = useState<string | null>(null);
   const [editOpData, setEditOpData] = useState<string>('');
   const [editOpQuantidades, setEditOpQuantidades] = useState<Record<number, number>>({});
@@ -102,7 +105,23 @@ export default function EncomendasPendentes({ encomendas, carregarDados, mostrar
                       </div>
                     </div>
                   ) : (
-                    <><h4 style={{ margin: '0 0 10px 0', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Falta produzir/entregar:</h4>{grupo.itens.map(item => <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px dashed rgba(255,255,255,0.05)' }}><span>{item.artigo_nome}</span><strong style={{ color: 'var(--primary-color)' }}>{item.quantidade_pedida} un.</strong></div>)}</>
+                    <>
+                      <h4 style={{ margin: '0 0 10px 0', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Falta produzir/entregar:</h4>
+                      {grupo.itens.map(item => (
+                        <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px dashed rgba(255,255,255,0.05)' }}>
+                          <span>{item.artigo_nome}</span>
+                          <strong style={{ color: 'var(--primary-color)' }}>{item.quantidade_pedida} un.</strong>
+                        </div>
+                      ))}
+                      
+                      {/* NOVO BOTÃO DE ATALHO PARA EXPEDIÇÃO */}
+                      <button 
+                        onClick={() => iniciarExpedicaoDePendente(grupo.op_numero)} 
+                        style={{...btnPrimary, marginTop: '15px', padding: '12px', fontSize: '0.95rem', backgroundColor: 'var(--primary-color)'}}
+                      >
+                        📦 Registar Saída desta OP
+                      </button>
+                    </>
                   )}
                 </div>
               </div>

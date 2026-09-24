@@ -43,50 +43,36 @@ export default function App() {
   const [modalConfirmacao, setModalConfirmacao] = useState<{ aberto: boolean; tipo: TipoModalConfirmacao; idParaApagar: number | string | null }>({ aberto: false, tipo: null, idParaApagar: null });
   const [alerta, setAlerta] = useState<{ visivel: boolean; titulo: string; mensagem: string; tipo: 'sucesso' | 'erro' | 'aviso' }>({ visivel: false, titulo: '', mensagem: '', tipo: 'sucesso' });
 
-  // 1. REFS PARA O BOTÃO "VOLTAR" FÍSICO DO TELEMÓVEL
+  // REFS PARA O BOTÃO "VOLTAR" FÍSICO DO TELEMÓVEL
   const ecraRef = useRef(ecraAtual);
   const listaExpedicaoRef = useRef(listaExpedicao);
 
-  // Manter as referências sempre atualizadas para o evento do telemóvel saber o que está a acontecer
   useEffect(() => {
     ecraRef.current = ecraAtual;
     listaExpedicaoRef.current = listaExpedicao;
   }, [ecraAtual, listaExpedicao]);
 
-  // 2. REGISTAR MUDANÇAS DE ECRÃ NO HISTÓRICO DO BROWSER/TELEMOVEL
   useEffect(() => { 
     sessionStorage.setItem('ecraAtualConfecao', ecraAtual); 
-    
-    // Se o histórico do sistema não tiver este ecrã registado, adicionamos
     if (!window.history.state || window.history.state.ecra !== ecraAtual) {
       window.history.pushState({ ecra: ecraAtual }, '');
     }
   }, [ecraAtual]);
 
-  // 3. INTERCETAR O CLIQUE FÍSICO DO BOTÃO "VOLTAR"
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
       const ecraAntesDeVoltar = ecraRef.current;
-      
-      // TRAVA DE SEGURANÇA: Voltar a meio de uma expedição com peças lidas
       if (ecraAntesDeVoltar === 'resumo_expedicao' && listaExpedicaoRef.current.length > 0) {
-        window.history.pushState({ ecra: 'resumo_expedicao' }, ''); // Anula o voltar fisicamente
-        setModalConfirmacao({ aberto: true, tipo: 'cancelar_lote', idParaApagar: null }); // Mostra modal
+        window.history.pushState({ ecra: 'resumo_expedicao' }, ''); 
+        setModalConfirmacao({ aberto: true, tipo: 'cancelar_lote', idParaApagar: null }); 
         return;
       }
-
-      // Navegação normal
-      if (event.state && event.state.ecra) {
-        setEcraAtual(event.state.ecra);
-      } else {
-        setEcraAtual('home');
-      }
+      if (event.state && event.state.ecra) { setEcraAtual(event.state.ecra); } 
+      else { setEcraAtual('home'); }
     };
-
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
-
 
   const mostrarAlerta = (titulo: string, mensagem: string, tipo: 'sucesso' | 'erro' | 'aviso' = 'aviso') => { setAlerta({ visivel: true, titulo, mensagem, tipo }); };
   const fecharAlerta = () => setAlerta({ ...alerta, visivel: false });
@@ -97,28 +83,21 @@ export default function App() {
     setACarregar(true);
     const { data: dadosArtigos } = await supabase.from('artigos').select('*').order('codigo');
     if (dadosArtigos) setArtigos(dadosArtigos);
-
     const { data: dadosSaidas } = await supabase.from('saidas').select('*').order('data', { ascending: false });
     if (dadosSaidas) setSaidas(dadosSaidas);
-
     const { data: dadosEnc } = await supabase.from('encomendas').select('*');
     if (dadosEnc) setEncomendas(dadosEnc);
-    
     setACarregar(false);
   }
 
   const handleLogin = (user: string, pass: string) => {
     if ((user === 'nelaze' && pass === '1988') || (user === 'admin' && pass === 'admin')) {
-      setAutenticado(true); 
-      sessionStorage.setItem('autenticadoConfecao', 'true');
-    } else {
-      mostrarAlerta('Acesso Negado', 'Credenciais incorretas.', 'erro');
-    }
+      setAutenticado(true); sessionStorage.setItem('autenticadoConfecao', 'true');
+    } else { mostrarAlerta('Acesso Negado', 'Credenciais incorretas.', 'erro'); }
   };
 
   const handleLogout = () => setModalConfirmacao({ aberto: true, tipo: 'logout', idParaApagar: null });
 
-  // Botão voltar visual no Header
   const handleVoltar = () => {
     if (ecraAtual === 'resumo_expedicao') { 
       if (listaExpedicao.length > 0) setModalConfirmacao({ aberto: true, tipo: 'cancelar_lote', idParaApagar: null });
@@ -126,6 +105,14 @@ export default function App() {
     } 
     else if (ecraAtual === 'scanner' || ecraAtual === 'formulario_saida') { setEcraAtual('resumo_expedicao'); } 
     else { setEcraAtual('home'); }
+  };
+
+  // ATALHO: INICIAR EXPEDIÇÃO A PARTIR DOS PENDENTES
+  const iniciarExpedicaoDePendente = (op_numero: string) => {
+    setOpSelecionada(op_numero);
+    setModoExpedicao('op');
+    setListaExpedicao([]);
+    setEcraAtual('resumo_expedicao');
   };
 
   // MÉTODOS DE MODAIS E DADOS
@@ -139,10 +126,7 @@ export default function App() {
     if (!tipo) return;
 
     if (tipo === 'logout') { 
-      setAutenticado(false); 
-      sessionStorage.removeItem('autenticadoConfecao'); 
-      sessionStorage.removeItem('ecraAtualConfecao');
-      setEcraAtual('home'); 
+      setAutenticado(false); sessionStorage.removeItem('autenticadoConfecao'); sessionStorage.removeItem('ecraAtualConfecao'); setEcraAtual('home'); 
     }
     else if (tipo === 'cancelar_lote') { setListaExpedicao([]); setEcraAtual('home'); }
     else if (tipo === 'saida' && idParaApagar) { await supabase.from('saidas').delete().eq('id', idParaApagar); carregarDados(); }
@@ -164,13 +148,9 @@ export default function App() {
 
   const carregarImagemBase64 = (url: string): Promise<string> => {
     return new Promise((resolve) => {
-      const img = new Image();
-      img.crossOrigin = 'Anonymous';
-      img.src = url;
+      const img = new Image(); img.crossOrigin = 'Anonymous'; img.src = url;
       img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
+        const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height;
         const ctx = canvas.getContext('2d');
         if (ctx) { ctx.drawImage(img, 0, 0); resolve(canvas.toDataURL('image/png')); } else { resolve(''); }
       };
@@ -180,12 +160,7 @@ export default function App() {
 
   const gerarPDF = async (grupo: any, comPrecos: boolean) => {
     const doc = new jsPDF();
-
-    try {
-      const logoBase64 = await carregarImagemBase64('/logo.png');
-      if (logoBase64) { doc.addImage(logoBase64, 'PNG', 14, 10, 22, 22); }
-    } catch (err) { console.warn('Erro ao carregar logótipo no PDF:', err); }
-
+    try { const logoBase64 = await carregarImagemBase64('/logo.png'); if (logoBase64) { doc.addImage(logoBase64, 'PNG', 14, 10, 22, 22); } } catch (err) { console.warn('Erro ao carregar logótipo no PDF:', err); }
     doc.setFontSize(16); doc.setTextColor(37, 99, 235); doc.text(`Nota de Expedição: ${grupo.lote_id}`, 40, 18);
     const dataLote = grupo.data ? new Date(grupo.data) : new Date();
     doc.setFontSize(10); doc.setTextColor(100); doc.text(`Data e Hora: ${dataLote.toLocaleString('pt-PT')}`, 40, 25);
@@ -193,28 +168,16 @@ export default function App() {
     if (comPrecos) { doc.setTextColor(220, 38, 38); doc.text('DOCUMENTO INTERNO - COM VALORES', 40, 31); } 
     else { doc.setTextColor(0); doc.text('DOCUMENTO DE ACOMPANHAMENTO DE MERCADORIA', 40, 31); }
 
-    const colunas = comPrecos 
-      ? ['Referência / Artigo', 'Ordem Prod. (OP)', 'Tamanho', 'Qtd', 'Total EUR'] 
-      : ['Referência / Artigo', 'Ordem Prod. (OP)', 'Tamanho', 'Qtd'];
-
-    const linhas = grupo.itens.map((i: Saida) => comPrecos 
-      ? [`${i.artigo_codigo} - ${i.artigo_nome}`, i.op_numero, i.tamanho || '---', i.quantidade.toString(), `${Number(i.total_faturado).toFixed(2)} €`] 
-      : [`${i.artigo_codigo} - ${i.artigo_nome}`, i.op_numero, i.tamanho || '---', i.quantidade.toString()]
-    );
-
+    const colunas = comPrecos ? ['Referência / Artigo', 'Ordem Prod. (OP)', 'Tamanho', 'Qtd', 'Total EUR'] : ['Referência / Artigo', 'Ordem Prod. (OP)', 'Tamanho', 'Qtd'];
+    const linhas = grupo.itens.map((i: Saida) => comPrecos ? [`${i.artigo_codigo} - ${i.artigo_nome}`, i.op_numero, i.tamanho || '---', i.quantidade.toString(), `${Number(i.total_faturado).toFixed(2)} €`] : [`${i.artigo_codigo} - ${i.artigo_nome}`, i.op_numero, i.tamanho || '---', i.quantidade.toString()]);
     autoTable(doc, { startY: 38, head: [colunas], body: linhas, theme: 'grid', headStyles: { fillColor: [37, 99, 235] }, styles: { fontSize: 10, cellPadding: 4 } });
 
     const totalQtd = grupo.itens.reduce((acc: number, i: Saida) => acc + Number(i.quantidade), 0);
     let finalY = (doc as any).lastAutoTable.finalY + 12;
-
     doc.setFontSize(11); doc.setTextColor(0); doc.text(`Total de Peças Expedidas: ${totalQtd} un.`, 14, finalY);
 
-    if (comPrecos) {
-      finalY += 7; doc.setFontSize(12); doc.setTextColor(37, 99, 235); doc.text(`Faturação Total do Lote: ${Number(grupo.total_faturado).toFixed(2)} EUR`, 14, finalY);
-    }
-
-    finalY += 15;
-    const dataExtenso = dataLote.toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' });
+    if (comPrecos) { finalY += 7; doc.setFontSize(12); doc.setTextColor(37, 99, 235); doc.text(`Faturação Total do Lote: ${Number(grupo.total_faturado).toFixed(2)} EUR`, 14, finalY); }
+    finalY += 15; const dataExtenso = dataLote.toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' });
     doc.setFontSize(10); doc.setTextColor(100); doc.text(`Documento emitido a ${dataExtenso}.`, 14, finalY);
 
     doc.save(`${grupo.lote_id}${comPrecos ? '_INTERNO' : '_CLIENTE'}.pdf`);
@@ -266,10 +229,22 @@ export default function App() {
         {ecraAtual === 'novo_produto' && <NovoProduto setEcraAtual={setEcraAtual} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} />}
         {ecraAtual === 'catalogo' && <Catalogo artigos={artigos} carregarDados={carregarDados} pedirConfirmacaoApagar={pedirConfirmacaoApagar} />}
         {ecraAtual === 'nova_encomenda' && <NovaEncomenda artigos={artigos} setEcraAtual={setEcraAtual} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} />}
-        {ecraAtual === 'encomendas_pendentes' && <EncomendasPendentes encomendas={encomendas} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} pedirConfirmacaoApagarEncomenda={pedirConfirmacaoApagarEncomenda} />}
+        
+        {/* Adicionámos a nova prop `iniciarExpedicaoDePendente` */}
+        {ecraAtual === 'encomendas_pendentes' && (
+          <EncomendasPendentes 
+            encomendas={encomendas} 
+            carregarDados={carregarDados} 
+            mostrarAlerta={mostrarAlerta} 
+            pedirConfirmacaoApagarEncomenda={pedirConfirmacaoApagarEncomenda} 
+            iniciarExpedicaoDePendente={iniciarExpedicaoDePendente}
+          />
+        )}
+        
         {ecraAtual === 'encomendas_concluidas' && <EncomendasConcluidas encomendas={encomendas} saidas={saidas} agruparSaidas={agruparSaidas} gerarPDF={gerarPDF} pedirConfirmacaoApagarEncomenda={pedirConfirmacaoApagarEncomenda} />}
         {ecraAtual === 'relatorio' && <Relatorio saidas={saidas} agruparSaidas={agruparSaidas} gerarPDF={gerarPDF} pedirConfirmacaoApagarLoteInteiro={pedirConfirmacaoApagarLoteInteiro} pedirConfirmacaoApagar={pedirConfirmacaoApagar} />}
         
+        {/* FLUXO DE EXPEDIÇÃO */}
         {['escolher_expedicao', 'resumo_expedicao', 'scanner', 'formulario_saida'].includes(ecraAtual) && (
           <Expedicao ecraAtual={ecraAtual} setEcraAtual={setEcraAtual} artigos={artigos} saidas={saidas} encomendas={encomendas} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} listaExpedicao={listaExpedicao} setListaExpedicao={setListaExpedicao} modoExpedicao={modoExpedicao} setModoExpedicao={setModoExpedicao} opSelecionada={opSelecionada} setOpSelecionada={setOpSelecionada} />
         )}
