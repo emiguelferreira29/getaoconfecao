@@ -167,6 +167,14 @@ export default function App() {
     doc.save(`${grupo.lote_id}${comPrecos ? '_INTERNO' : '_CLIENTE'}.pdf`);
   };
 
+  // ESTILOS PARA O NOVO MENU INFERIOR
+  const navItemStyle = (isActive: boolean) => ({
+    display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: '6px',
+    color: isActive ? 'var(--primary-color)' : 'var(--text-secondary)',
+    background: 'none', border: 'none', fontSize: '0.75rem', cursor: 'pointer', flex: 1,
+    transition: 'color 0.2s ease'
+  });
+
   if (!autenticado) {
     return (
       <>
@@ -179,59 +187,70 @@ export default function App() {
   if (aCarregar) return <div className="loading">A sincronizar com a base de dados...</div>;
 
   return (
-    <div style={{ maxWidth: '600px', margin: '0 auto', minHeight: '100vh', position: 'relative' }}>
-      <header style={{ padding: '20px', backgroundColor: 'var(--surface-color)', borderBottom: '1px solid var(--border-color)', position: 'sticky', top: 0, zIndex: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <img src="/logo.png" alt="Logótipo" style={{ height: '35px', width: '35px', objectFit: 'contain', borderRadius: '8px' }} />
-          <h1 style={{ fontSize: '1.2rem', margin: 0, color: 'var(--primary-color)' }}>Confeção</h1>
+    <div style={{ maxWidth: '600px', margin: '0 auto', minHeight: '100vh', position: 'relative', paddingBottom: '90px' }}>
+      
+      {/* HEADER LIMPO */}
+      <header style={{ padding: '15px 20px', backgroundColor: 'var(--surface-color)', borderBottom: '1px solid var(--border-color)', position: 'sticky', top: 0, zIndex: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <img src="/logo.png" alt="Logótipo" style={{ height: '32px', width: '32px', objectFit: 'contain', borderRadius: '8px' }} />
+          <h1 style={{ fontSize: '1.2rem', margin: 0, color: 'var(--text-primary)', fontWeight: '600' }}>M & J Tailors - Confeção</h1>
         </div>
         <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
           {ecraAtual !== 'home' && (
-            <button onClick={handleVoltar} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.9rem' }}>◀ Voltar</button>
+            <button onClick={handleVoltar} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+              Voltar
+            </button>
           )}
-          {/* BOTÃO DE SAIR ATUALIZADO AQUI */}
-          <button 
-            onClick={handleLogout} 
-            style={{ 
-              background: 'none', 
-              border: 'none', 
-              cursor: 'pointer', 
-              color: 'var(--text-secondary)', 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '6px',
-              fontSize: '0.95rem',
-              fontWeight: 'bold'
-            }} 
-            title="Terminar Sessão"
-          >
+          <button onClick={handleLogout} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', fontWeight: '500' }} title="Terminar Sessão">
             Sair
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-              <polyline points="16 17 21 12 16 7"></polyline>
-              <line x1="21" y1="12" x2="9" y2="12"></line>
-            </svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
           </button>
         </div>
       </header>
 
-      <main style={{ padding: '20px', paddingBottom: '90px' }}>
+      <main style={{ padding: '20px' }}>
         {ecraAtual === 'home' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', animation: 'fadeIn 0.3s' }}>
-            <h2 style={{ fontSize: '1.5rem', marginBottom: '10px' }}>Painel Principal</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <button onClick={() => setEcraAtual('nova_encomenda')} style={{...btnPrimary, padding: '20px', fontSize: '1.1rem', backgroundColor: '#8b5cf6'}}>📥 Registar Entrada</button>
-              <button onClick={() => setEcraAtual('escolher_expedicao')} style={{...btnPrimary, padding: '20px', fontSize: '1.1rem'}}>📦 Registar Saída</button>
+          <div style={{ animation: 'fadeIn 0.3s' }}>
+            <div style={{ marginBottom: '30px' }}>
+              <h2 style={{ fontSize: '1.6rem', margin: '0 0 4px 0', fontWeight: '700' }}>Painel de Gestão</h2>
+              <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '0.9rem' }}>Controlo de Produção e Logística</p>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <button onClick={() => setEcraAtual('encomendas_pendentes')} style={{...btnCard, padding: '20px', fontSize: '1rem', backgroundColor: 'var(--surface-color)', border: '2px dashed #eab308', color: '#eab308'}}>📋 Pendentes</button>
-              <button onClick={() => setEcraAtual('encomendas_concluidas')} style={{...btnCard, padding: '20px', fontSize: '1rem', backgroundColor: 'var(--surface-color)', border: '2px dashed #22c55e', color: '#22c55e'}}>✅ Concluídas</button>
+
+            {/* AÇÕES PRINCIPAIS (NOVOS BOTÕES) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '35px' }}>
+              <button onClick={() => setEcraAtual('nova_encomenda')} style={{ backgroundColor: '#8b5cf6', color: 'white', border: 'none', borderRadius: '16px', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', cursor: 'pointer', boxShadow: '0 4px 15px rgba(139, 92, 246, 0.25)', transition: 'transform 0.1s' }}>
+                <div style={{ backgroundColor: 'rgba(255,255,255,0.2)', padding: '12px', borderRadius: '50%' }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                </div>
+                <span style={{ fontWeight: '600', fontSize: '1.05rem' }}>Registar Entrada</span>
+              </button>
+              
+              <button onClick={() => setEcraAtual('escolher_expedicao')} style={{ backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '16px', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', cursor: 'pointer', boxShadow: '0 4px 15px rgba(59, 130, 246, 0.25)', transition: 'transform 0.1s' }}>
+                <div style={{ backgroundColor: 'rgba(255,255,255,0.2)', padding: '12px', borderRadius: '50%' }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                </div>
+                <span style={{ fontWeight: '600', fontSize: '1.05rem' }}>Registar Saída</span>
+              </button>
             </div>
-            <div style={{ borderTop: '1px solid var(--border-color)', margin: '10px 0' }}></div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-              <button onClick={() => setEcraAtual('novo_produto')} style={btnSecondary}>➕ Novo Produto</button>
-              <button onClick={() => setEcraAtual('catalogo')} style={btnCard}>📋 Catálogo</button>
-              <button onClick={() => setEcraAtual('relatorio')} style={{...btnCard, gridColumn: 'span 2'}}>💰 Faturação</button>
+
+            {/* OPERAÇÕES SECUNDÁRIAS */}
+            <h3 style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>Operações</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <button onClick={() => setEcraAtual('encomendas_concluidas')} style={{...btnCard, padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'flex-start', border: '1px solid rgba(34, 197, 94, 0.3)'}}>
+                <div style={{ color: '#22c55e', display: 'flex' }}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
+                <span style={{ fontWeight: '500' }}>Concluídas</span>
+              </button>
+              
+              <button onClick={() => setEcraAtual('catalogo')} style={{...btnCard, padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'flex-start'}}>
+                <div style={{ color: '#a8a29e', display: 'flex' }}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg></div>
+                <span style={{ fontWeight: '500' }}>Catálogo</span>
+              </button>
+              
+              <button onClick={() => setEcraAtual('novo_produto')} style={{...btnCard, padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'center', gridColumn: 'span 2', backgroundColor: 'transparent', border: '1px dashed var(--border-color)'}}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                <span style={{ fontWeight: '500' }}>Adicionar Novo Produto</span>
+              </button>
             </div>
           </div>
         )}
@@ -248,6 +267,32 @@ export default function App() {
           <Expedicao ecraAtual={ecraAtual} setEcraAtual={setEcraAtual} artigos={artigos} saidas={saidas} encomendas={encomendas} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} listaExpedicao={listaExpedicao} setListaExpedicao={setListaExpedicao} modoExpedicao={modoExpedicao} setModoExpedicao={setModoExpedicao} opSelecionada={opSelecionada} setOpSelecionada={setOpSelecionada} />
         )}
       </main>
+
+      {/* NOVO MENU INFERIOR (BOTTOM NAVIGATION) */}
+      <nav style={{
+        position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)',
+        width: '100%', maxWidth: '600px', backgroundColor: 'var(--surface-color)',
+        borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-around',
+        padding: '12px 0', paddingBottom: 'calc(12px + env(safe-area-inset-bottom))', zIndex: 100,
+        boxShadow: '0 -10px 20px rgba(0,0,0,0.3)'
+      }}>
+        <button onClick={() => setEcraAtual('home')} style={navItemStyle(ecraAtual === 'home')}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ecraAtual === 'home' ? "2.5" : "2"} strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+          Início
+        </button>
+        <button onClick={() => setEcraAtual('encomendas_pendentes')} style={navItemStyle(ecraAtual === 'encomendas_pendentes')}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ecraAtual === 'encomendas_pendentes' ? "2.5" : "2"} strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+          Pendentes
+        </button>
+        <button onClick={() => setEcraAtual('escolher_expedicao')} style={navItemStyle(['escolher_expedicao', 'resumo_expedicao', 'scanner', 'formulario_saida'].includes(ecraAtual))}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={['escolher_expedicao', 'resumo_expedicao', 'scanner', 'formulario_saida'].includes(ecraAtual) ? "2.5" : "2"} strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+          Expedir
+        </button>
+        <button onClick={() => setEcraAtual('relatorio')} style={navItemStyle(ecraAtual === 'relatorio')}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ecraAtual === 'relatorio' ? "2.5" : "2"} strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+          Faturação
+        </button>
+      </nav>
 
       <ModalAlerta visivel={alerta.visivel} titulo={alerta.titulo} mensagem={alerta.mensagem} tipo={alerta.tipo} onFechar={fecharAlerta} />
       <ModalConfirmacao aberto={modalConfirmacao.aberto} tipo={modalConfirmacao.tipo} onCancelar={cancelarModal} onConfirmar={executarAcaoModal} />
