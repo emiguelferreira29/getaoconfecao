@@ -183,7 +183,15 @@ export default function App() {
     );
   }
 
-  if (aCarregar) return <div className="loading">A sincronizar com a base de dados...</div>;
+  // ECRÃ DE CARREGAMENTO (SPLASH SCREEN) COM O LOGÓTIPO MAIOR
+  if (aCarregar) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', backgroundColor: 'var(--bg-color)', gap: '20px', animation: 'fadeIn 0.3s' }}>
+        <img src="/logo.png" alt="Logótipo M&J" style={{ width: '150px', height: '150px', objectFit: 'contain', borderRadius: '16px' }} />
+        <div style={{ color: 'var(--text-secondary)', fontSize: '1.1rem', fontWeight: '500' }}>A carregar dados...</div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ maxWidth: '600px', margin: '0 auto', minHeight: '100vh', position: 'relative', paddingBottom: '90px' }}>
@@ -191,6 +199,7 @@ export default function App() {
       <header style={{ padding: '15px 20px', backgroundColor: 'var(--surface-color)', borderBottom: '1px solid var(--border-color)', position: 'sticky', top: 0, zIndex: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <img src="/logo.png" alt="Logótipo" style={{ height: '32px', width: '32px', objectFit: 'contain', borderRadius: '8px' }} />
+          {/* A SUA ALTERAÇÃO NO TÍTULO MANTIDA AQUI */}
           <h1 style={{ fontSize: '1.2rem', margin: 0, color: 'var(--text-primary)', fontWeight: '600' }}>M&J Tailors - Confeção</h1>
         </div>
         <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>

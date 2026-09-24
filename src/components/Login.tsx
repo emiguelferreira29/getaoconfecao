@@ -1,39 +1,43 @@
 import React, { useState } from 'react';
+import { btnPrimary, inputStyle, labelStyle } from './Modais';
 
-type LoginProps = {
+type Props = {
   onLogin: (user: string, pass: string) => void;
 };
 
-export default function Login({ onLogin }: LoginProps) {
-  const [loginUser, setLoginUser] = useState('');
-  const [loginPass, setLoginPass] = useState('');
+export default function Login({ onLogin }: Props) {
+  const [user, setUser] = useState('');
+  const [pass, setPass] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onLogin(loginUser, loginPass);
+    onLogin(user, pass);
   };
 
   return (
-    <div style={{ maxWidth: '600px', margin: '0 auto', minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '20px', backgroundColor: 'var(--bg-color)', animation: 'fadeIn 0.5s' }}>
-      <img src="/logo.png" alt="Logótipo" style={{ width: '130px', height: '130px', objectFit: 'contain', borderRadius: '24px', marginBottom: '20px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
-      <h2 style={{ fontSize: '1.8rem', color: 'var(--primary-color)', marginBottom: '30px' }}>Bem-vindo</h2>
-      
-      <form onSubmit={handleSubmit} style={{ width: '100%', maxWidth: '300px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
-        <div>
-          <label style={labelStyle}>Utilizador</label>
-          <input type="text" value={loginUser} onChange={e => setLoginUser(e.target.value)} required style={inputStyle} />
-        </div>
-        <div>
-          <label style={labelStyle}>Palavra-passe</label>
-          <input type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} required style={inputStyle} />
-        </div>
-        <button type="submit" style={{ ...btnPrimary, marginTop: '10px' }}>Entrar</button>
-      </form>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: '20px', backgroundColor: 'var(--bg-color)' }}>
+      <div style={{ backgroundColor: 'var(--surface-color)', padding: '40px 30px', borderRadius: '24px', width: '100%', maxWidth: '400px', boxShadow: '0 10px 40px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', alignItems: 'center', animation: 'fadeIn 0.5s' }}>
+        
+        {/* LOGÓTIPO MAIOR E DESTACADO */}
+        <img src="/logo.png" alt="Logótipo M&J Confeção" style={{ width: '160px', height: '160px', objectFit: 'contain', marginBottom: '30px', borderRadius: '16px' }} />
+        
+        <h2 style={{ fontSize: '1.5rem', marginBottom: '25px', color: 'var(--text-primary)', textAlign: 'center' }}>Iniciar Sessão</h2>
+        
+        <form onSubmit={handleSubmit} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+          <div>
+            <label style={labelStyle}>Utilizador</label>
+            <input type="text" value={user} onChange={e => setUser(e.target.value)} style={{ ...inputStyle, padding: '12px' }} required />
+          </div>
+          <div>
+            <label style={labelStyle}>Palavra-passe</label>
+            <input type="password" value={pass} onChange={e => setPass(e.target.value)} style={{ ...inputStyle, padding: '12px' }} required />
+          </div>
+          
+          <button type="submit" style={{ ...btnPrimary, marginTop: '10px', padding: '15px', fontSize: '1.1rem', borderRadius: '12px', width: '100%' }}>
+            Entrar
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
-
-// Estilos necessários apenas para o Login
-const btnPrimary: React.CSSProperties = { width: '100%', padding: '15px', backgroundColor: 'var(--primary-color)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer' };
-const inputStyle: React.CSSProperties = { width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-color)', color: 'var(--text-primary)', fontSize: '1rem', boxSizing: 'border-box' };
-const labelStyle: React.CSSProperties = { display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: 'bold' };
