@@ -1,12 +1,11 @@
-import type { Saida, Subcontrato, Ecra } from '../App';
+import type { Saida, Subcontrato } from '../App';
 
 type Props = {
   saidas: Saida[];
   subcontratos: Subcontrato[];
-  setEcraAtual: (ecra: Ecra) => void;
 };
 
-export default function Relatorio({ saidas, subcontratos, setEcraAtual }: Props) {
+export default function Relatorio({ saidas, subcontratos }: Props) {
   
   // Agrupar financeiramente por Ordem de Produção (OP)
   const agruparFinanceiroOP = () => {
@@ -68,24 +67,7 @@ export default function Relatorio({ saidas, subcontratos, setEcraAtual }: Props)
             return (
               <div key={grupo.op_numero} style={{ backgroundColor: 'var(--surface-color)', border: '1px solid var(--border-color)', borderRadius: '12px', overflow: 'hidden' }}>
                 <div style={{ backgroundColor: 'rgba(255,255,255,0.03)', padding: '15px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  
-                  {/* OP AGORA É CLICÁVEL COM ATALHO PARA AS CONCLUÍDAS */}
-                  <strong 
-                    onClick={() => setEcraAtual('encomendas_concluidas')}
-                    style={{ 
-                      fontSize: '1.2rem', 
-                      color: 'var(--primary-color)', 
-                      cursor: 'pointer', 
-                      textDecoration: 'underline',
-                      transition: 'opacity 0.2s'
-                    }}
-                    title="Ver Guias de Expedição"
-                    onMouseOver={(e) => e.currentTarget.style.opacity = '0.7'}
-                    onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
-                  >
-                    🔗 {grupo.op_numero}
-                  </strong>
-                  
+                  <strong style={{ fontSize: '1.2rem', color: 'var(--primary-color)' }}>{grupo.op_numero}</strong>
                   <div style={{ textAlign: 'right' }}>
                     <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: lucro >= 0 ? '#22c55e' : '#ef4444' }}>
                       {lucro >= 0 ? '+' : ''}{lucro.toFixed(2)}€

@@ -112,6 +112,7 @@ export default function App() {
     setOpSelecionada(op_numero); setModoExpedicao('op'); setListaExpedicao([]); setEcraAtual('resumo_expedicao');
   };
 
+  // Aqui apagámos a função "pedirConfirmacaoApagarLoteInteiro"
   const pedirConfirmacaoApagar = (id: number, tipo: 'saida' | 'artigo') => { setModalConfirmacao({ aberto: true, tipo, idParaApagar: id }); };
   const pedirConfirmacaoApagarEncomenda = (op_numero: string) => { setModalConfirmacao({ aberto: true, tipo: 'encomenda_inteira', idParaApagar: op_numero }); };
   const cancelarModal = () => setModalConfirmacao({ aberto: false, tipo: null, idParaApagar: null });
@@ -214,9 +215,7 @@ export default function App() {
         {ecraAtual === 'nova_encomenda' && <NovaEncomenda artigos={artigos} setEcraAtual={setEcraAtual} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} />}
         {ecraAtual === 'encomendas_pendentes' && <EncomendasPendentes artigos={artigos} encomendas={encomendas} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} pedirConfirmacaoApagarEncomenda={pedirConfirmacaoApagarEncomenda} iniciarExpedicaoDePendente={iniciarExpedicaoDePendente} />}
         {ecraAtual === 'encomendas_concluidas' && <EncomendasConcluidas encomendas={encomendas} saidas={saidas} agruparSaidas={agruparSaidas} gerarPDF={gerarPDF} pedirConfirmacaoApagarEncomenda={pedirConfirmacaoApagarEncomenda} />}
-        
-        {/* Passamos o setEcraAtual para o Relatorio */}
-        {ecraAtual === 'relatorio' && <Relatorio saidas={saidas} subcontratos={subcontratos} setEcraAtual={setEcraAtual} />}
+        {ecraAtual === 'relatorio' && <Relatorio saidas={saidas} subcontratos={subcontratos} />}
         
         {['escolher_expedicao', 'resumo_expedicao', 'scanner', 'formulario_saida'].includes(ecraAtual) && (
           <Expedicao ecraAtual={ecraAtual} setEcraAtual={setEcraAtual} artigos={artigos} saidas={saidas} encomendas={encomendas} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} listaExpedicao={listaExpedicao} setListaExpedicao={setListaExpedicao} modoExpedicao={modoExpedicao} setModoExpedicao={setModoExpedicao} opSelecionada={opSelecionada} setOpSelecionada={setOpSelecionada} />
