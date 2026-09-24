@@ -18,6 +18,13 @@ export default function EncomendasPendentes({
   const [editOpData, setEditOpData] = useState<string>('');
   const [editOpQuantidades, setEditOpQuantidades] = useState<Record<number, number>>({});
 
+  // ESTADOS DO SUBCONTRATO
+  const [subcontratandoOpId, setSubcontratandoOpId] = useState<string | null>(null);
+  const [subArtigo, setSubArtigo] = useState('');
+  const [subQtd, setSubQtd] = useState('');
+  const [subCusto, setSubCusto] = useState('');
+  const [subPessoa, setSubPessoa] = useState('');
+
   const agruparEncomendasPendentes = () => {
     const grupos: Record<string, { op_numero: string; data_entrega: string | null; cliente_final: string | null; itens: Encomenda[] }> = {};
     encomendas.filter(e => e.estado === 'pendente').forEach(enc => { 
@@ -42,6 +49,7 @@ export default function EncomendasPendentes({
 
   const iniciarEdicaoOp = (grupo: any) => {
     setEditandoOpId(grupo.op_numero); setEditOpData(grupo.data_entrega || '');
+    setSubcontratandoOpId(null);
     const qtds: Record<number, number> = {};
     grupo.itens.forEach((item: Encomenda) => { qtds[item.id] = item.quantidade_pedida; });
     setEditOpQuantidades(qtds);
@@ -58,6 +66,28 @@ export default function EncomendasPendentes({
       mostrarAlerta('Sucesso', `A ${op_numero} foi atualizada!`, 'sucesso'); 
       setEditandoOpId(null); carregarDados();
     } catch (err: any) { mostrarAlerta('Erro ao atualizar', err.message, 'erro'); }
+  };
+
+  // GUARDAR SUBCONTRATO NA BASE DE DADOS
+  const guardarSubcontrato = async (op_numero: string) => {
+    if (!subArtigo || !subQtd || !subCusto) return mostrarAlerta('Atenção', 'Preencha o artigo, quantidade e custo.', 'aviso');
+    
+    const { error } = await supabase.from('subcontratos').insert({
+      op_numero,
+      artigo_nome: subArtigo,
+      quantidade: parseInt(subQtd),
+      custo_total: parseFloat(subCusto.replace(',', '.')),
+      subcontratado_a: subPessoa
+    });
+
+    if (error) {
+      mostrarAlerta('Erro', error.message, 'erro');
+    } else {
+      mostrarAlerta('Sucesso', 'O Custo do subcontrato foi registado e associado a esta OP!', 'sucesso');
+      setSubcontratandoOpId(null);
+      setSubArtigo(''); setSubQtd(''); setSubCusto(''); setSubPessoa('');
+      carregarDados();
+    }
   };
 
   const gruposPendentes = agruparEncomendasPendentes();
@@ -87,6 +117,7 @@ export default function EncomendasPendentes({
                   </div>
                 </div>
                 <div style={{ padding: '15px' }}>
+                  
                   {editandoOpId === grupo.op_numero ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', animation: 'fadeIn 0.2s' }}>
                       <div><label style={{...labelStyle, fontSize: '0.85rem'}}>Nova Data de Entrega:</label><input type="date" value={editOpData} onChange={e => setEditOpData(e.target.value)} style={{...inputStyle, padding: '8px'}} /></div>
@@ -114,13 +145,30 @@ export default function EncomendasPendentes({
                         </div>
                       ))}
                       
-                      {/* NOVO BOTÃO DE ATALHO PARA EXPEDIÇÃO */}
-                      <button 
-                        onClick={() => iniciarExpedicaoDePendente(grupo.op_numero)} 
-                        style={{...btnPrimary, marginTop: '15px', padding: '12px', fontSize: '0.95rem', backgroundColor: 'var(--primary-color)'}}
-                      >
-                        📦 Registar Saída desta OP
-                      </button>
+                      {/* O FORMULÁRIO DE SUBCONTRATAÇÃO APARECE AQUI */}
+                      {subcontratandoOpId === grupo.op_numero ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', animation: 'fadeIn 0.2s', marginTop: '15px', backgroundColor: 'rgba(0,0,0,0.2)', padding: '15px', borderRadius: '8px', border: '1px dashed #eab308' }}>
+                          <h4 style={{ margin: 0, color: '#eab308' }}>🤝 Registar Subcontratação</h4>
+                          <select value={subArtigo} onChange={e => setSubArtigo(e.target.value)} style={inputStyle}>
+                            <option value="" disabled>Artigo a subcontratar...</option>
+                            {grupo.itens.map(item => <option key={item.id} value={item.artigo_nome}>{item.artigo_nome}</option>)}
+                          </select>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                            <input type="number" min="1" placeholder="Quantidade" value={subQtd} onChange={e => setSubQtd(e.target.value)} style={inputStyle} />
+                            <input type="number" step="0.01" placeholder="Custo Total (€)" value={subCusto} onChange={e => setSubCusto(e.target.value)} style={inputStyle} />
+                          </div>
+                          <input type="text" placeholder="Subcontratado a (Nome / Empresa)" value={subPessoa} onChange={e => setSubPessoa(e.target.value)} style={inputStyle} />
+                          <div style={{ display: 'flex', gap: '10px', marginTop: '5px' }}>
+                            <button onClick={() => setSubcontratandoOpId(null)} style={{...btnSecondary, padding: '10px', flex: 1}}>Cancelar</button>
+                            <button onClick={() => guardarSubcontrato(grupo.op_numero)} style={{...btnPrimary, backgroundColor: '#eab308', padding: '10px', flex: 1}}>Registar Custo</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
+                          <button onClick={() => iniciarExpedicaoDePendente(grupo.op_numero)} style={{...btnPrimary, padding: '12px', fontSize: '0.95rem', flex: 1}}>📦 Expedir</button>
+                          <button onClick={() => { setSubcontratandoOpId(grupo.op_numero); setEditandoOpId(null); }} style={{...btnPrimary, padding: '12px', fontSize: '0.95rem', backgroundColor: '#eab308', flex: 1}}>🤝 Subcontratar</button>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
