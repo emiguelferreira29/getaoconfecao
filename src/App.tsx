@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabase';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -29,10 +29,6 @@ export default function App() {
   const [autenticado, setAutenticado] = useState<boolean>(() => sessionStorage.getItem('autenticadoConfecao') === 'true');
   const [ecraAtual, setEcraAtual] = useState<Ecra>(() => (sessionStorage.getItem('ecraAtualConfecao') as Ecra) || 'home');
 
-  useEffect(() => { 
-    sessionStorage.setItem('ecraAtualConfecao', ecraAtual); 
-  }, [ecraAtual]);
-
   const [artigos, setArtigos] = useState<Artigo[]>([]);
   const [saidas, setSaidas] = useState<Saida[]>([]);
   const [encomendas, setEncomendas] = useState<Encomenda[]>([]);
@@ -43,9 +39,54 @@ export default function App() {
   const [opSelecionada, setOpSelecionada] = useState<string>('');
   const [listaExpedicao, setListaExpedicao] = useState<ItemExpedicao[]>([]);
 
-  // ESTADOS MODAIS
+  // ESTADOS MODAIS E REFERÊNCIAS
   const [modalConfirmacao, setModalConfirmacao] = useState<{ aberto: boolean; tipo: TipoModalConfirmacao; idParaApagar: number | string | null }>({ aberto: false, tipo: null, idParaApagar: null });
   const [alerta, setAlerta] = useState<{ visivel: boolean; titulo: string; mensagem: string; tipo: 'sucesso' | 'erro' | 'aviso' }>({ visivel: false, titulo: '', mensagem: '', tipo: 'sucesso' });
+
+  // 1. REFS PARA O BOTÃO "VOLTAR" FÍSICO DO TELEMÓVEL
+  const ecraRef = useRef(ecraAtual);
+  const listaExpedicaoRef = useRef(listaExpedicao);
+
+  // Manter as referências sempre atualizadas para o evento do telemóvel saber o que está a acontecer
+  useEffect(() => {
+    ecraRef.current = ecraAtual;
+    listaExpedicaoRef.current = listaExpedicao;
+  }, [ecraAtual, listaExpedicao]);
+
+  // 2. REGISTAR MUDANÇAS DE ECRÃ NO HISTÓRICO DO BROWSER/TELEMOVEL
+  useEffect(() => { 
+    sessionStorage.setItem('ecraAtualConfecao', ecraAtual); 
+    
+    // Se o histórico do sistema não tiver este ecrã registado, adicionamos
+    if (!window.history.state || window.history.state.ecra !== ecraAtual) {
+      window.history.pushState({ ecra: ecraAtual }, '');
+    }
+  }, [ecraAtual]);
+
+  // 3. INTERCETAR O CLIQUE FÍSICO DO BOTÃO "VOLTAR"
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      const ecraAntesDeVoltar = ecraRef.current;
+      
+      // TRAVA DE SEGURANÇA: Voltar a meio de uma expedição com peças lidas
+      if (ecraAntesDeVoltar === 'resumo_expedicao' && listaExpedicaoRef.current.length > 0) {
+        window.history.pushState({ ecra: 'resumo_expedicao' }, ''); // Anula o voltar fisicamente
+        setModalConfirmacao({ aberto: true, tipo: 'cancelar_lote', idParaApagar: null }); // Mostra modal
+        return;
+      }
+
+      // Navegação normal
+      if (event.state && event.state.ecra) {
+        setEcraAtual(event.state.ecra);
+      } else {
+        setEcraAtual('home');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
 
   const mostrarAlerta = (titulo: string, mensagem: string, tipo: 'sucesso' | 'erro' | 'aviso' = 'aviso') => { setAlerta({ visivel: true, titulo, mensagem, tipo }); };
   const fecharAlerta = () => setAlerta({ ...alerta, visivel: false });
@@ -77,16 +118,20 @@ export default function App() {
 
   const handleLogout = () => setModalConfirmacao({ aberto: true, tipo: 'logout', idParaApagar: null });
 
+  // Botão voltar visual no Header
   const handleVoltar = () => {
-    if (ecraAtual === 'resumo_expedicao') { pedirConfirmacaoCancelarLote(); } 
+    if (ecraAtual === 'resumo_expedicao') { 
+      if (listaExpedicao.length > 0) setModalConfirmacao({ aberto: true, tipo: 'cancelar_lote', idParaApagar: null });
+      else setEcraAtual('home');
+    } 
     else if (ecraAtual === 'scanner' || ecraAtual === 'formulario_saida') { setEcraAtual('resumo_expedicao'); } 
     else { setEcraAtual('home'); }
   };
 
+  // MÉTODOS DE MODAIS E DADOS
   const pedirConfirmacaoApagar = (id: number, tipo: 'saida' | 'artigo') => { setModalConfirmacao({ aberto: true, tipo, idParaApagar: id }); };
   const pedirConfirmacaoApagarLoteInteiro = (lote_id: string) => { setModalConfirmacao({ aberto: true, tipo: 'lote_inteiro', idParaApagar: lote_id }); };
   const pedirConfirmacaoApagarEncomenda = (op_numero: string) => { setModalConfirmacao({ aberto: true, tipo: 'encomenda_inteira', idParaApagar: op_numero }); };
-  const pedirConfirmacaoCancelarLote = () => { if (listaExpedicao.length > 0) setModalConfirmacao({ aberto: true, tipo: 'cancelar_lote', idParaApagar: null }); else setEcraAtual('home'); };
   const cancelarModal = () => setModalConfirmacao({ aberto: false, tipo: null, idParaApagar: null });
 
   const executarAcaoModal = async () => {
@@ -104,6 +149,7 @@ export default function App() {
     else if (tipo === 'artigo' && idParaApagar) { await supabase.from('artigos').delete().eq('id', idParaApagar); carregarDados(); }
     else if (tipo === 'lote_inteiro' && idParaApagar) { const { error } = await supabase.from('saidas').delete().eq('lote_id', idParaApagar as string); if (!error) { carregarDados(); mostrarAlerta('Sucesso', 'A expedição foi eliminada.', 'sucesso'); } }
     else if (tipo === 'encomenda_inteira' && idParaApagar) { const { error } = await supabase.from('encomendas').delete().eq('op_numero', idParaApagar as string); if (!error) { carregarDados(); mostrarAlerta('Sucesso', 'A Ordem de Produção foi apagada!', 'sucesso'); } else mostrarAlerta('Erro', error.message, 'erro'); }
+    
     setModalConfirmacao({ aberto: false, tipo: null, idParaApagar: null });
   };
 
@@ -216,6 +262,7 @@ export default function App() {
           </div>
         )}
 
+        {/* PÁGINAS MODULARES */}
         {ecraAtual === 'novo_produto' && <NovoProduto setEcraAtual={setEcraAtual} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} />}
         {ecraAtual === 'catalogo' && <Catalogo artigos={artigos} carregarDados={carregarDados} pedirConfirmacaoApagar={pedirConfirmacaoApagar} />}
         {ecraAtual === 'nova_encomenda' && <NovaEncomenda artigos={artigos} setEcraAtual={setEcraAtual} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} />}
