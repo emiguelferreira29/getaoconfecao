@@ -112,8 +112,8 @@ export default function App() {
     setOpSelecionada(op_numero); setModoExpedicao('op'); setListaExpedicao([]); setEcraAtual('resumo_expedicao');
   };
 
+  // Aqui apagámos a função "pedirConfirmacaoApagarLoteInteiro"
   const pedirConfirmacaoApagar = (id: number, tipo: 'saida' | 'artigo') => { setModalConfirmacao({ aberto: true, tipo, idParaApagar: id }); };
-  const pedirConfirmacaoApagarLoteInteiro = (lote_id: string) => { setModalConfirmacao({ aberto: true, tipo: 'lote_inteiro', idParaApagar: lote_id }); };
   const pedirConfirmacaoApagarEncomenda = (op_numero: string) => { setModalConfirmacao({ aberto: true, tipo: 'encomenda_inteira', idParaApagar: op_numero }); };
   const cancelarModal = () => setModalConfirmacao({ aberto: false, tipo: null, idParaApagar: null });
 
@@ -124,7 +124,6 @@ export default function App() {
     else if (tipo === 'cancelar_lote') { setListaExpedicao([]); setEcraAtual('home'); }
     else if (tipo === 'saida' && idParaApagar) { await supabase.from('saidas').delete().eq('id', idParaApagar); carregarDados(); }
     else if (tipo === 'artigo' && idParaApagar) { await supabase.from('artigos').delete().eq('id', idParaApagar); carregarDados(); }
-    else if (tipo === 'lote_inteiro' && idParaApagar) { const { error } = await supabase.from('saidas').delete().eq('lote_id', idParaApagar as string); if (!error) { carregarDados(); mostrarAlerta('Sucesso', 'A expedição foi eliminada.', 'sucesso'); } }
     else if (tipo === 'encomenda_inteira' && idParaApagar) { const { error } = await supabase.from('encomendas').delete().eq('op_numero', idParaApagar as string); if (!error) { carregarDados(); mostrarAlerta('Sucesso', 'A Ordem de Produção foi apagada!', 'sucesso'); } else mostrarAlerta('Erro', error.message, 'erro'); }
     setModalConfirmacao({ aberto: false, tipo: null, idParaApagar: null });
   };
