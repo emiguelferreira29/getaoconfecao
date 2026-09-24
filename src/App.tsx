@@ -167,7 +167,6 @@ export default function App() {
     doc.save(`${grupo.lote_id}${comPrecos ? '_INTERNO' : '_CLIENTE'}.pdf`);
   };
 
-  // ESTILOS PARA O NOVO MENU INFERIOR
   const navItemStyle = (isActive: boolean) => ({
     display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: '6px',
     color: isActive ? 'var(--primary-color)' : 'var(--text-secondary)',
@@ -189,11 +188,10 @@ export default function App() {
   return (
     <div style={{ maxWidth: '600px', margin: '0 auto', minHeight: '100vh', position: 'relative', paddingBottom: '90px' }}>
       
-      {/* HEADER LIMPO */}
       <header style={{ padding: '15px 20px', backgroundColor: 'var(--surface-color)', borderBottom: '1px solid var(--border-color)', position: 'sticky', top: 0, zIndex: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <img src="/logo.png" alt="Logótipo" style={{ height: '32px', width: '32px', objectFit: 'contain', borderRadius: '8px' }} />
-          <h1 style={{ fontSize: '1.2rem', margin: 0, color: 'var(--text-primary)', fontWeight: '600' }}>M & J Tailors - Confeção</h1>
+          <h1 style={{ fontSize: '1.2rem', margin: 0, color: 'var(--text-primary)', fontWeight: '600' }}>Confeção</h1>
         </div>
         <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
           {ecraAtual !== 'home' && (
@@ -217,16 +215,15 @@ export default function App() {
               <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '0.9rem' }}>Controlo de Produção e Logística</p>
             </div>
 
-            {/* AÇÕES PRINCIPAIS (NOVOS BOTÕES) */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '35px' }}>
-              <button onClick={() => setEcraAtual('nova_encomenda')} style={{ backgroundColor: '#8b5cf6', color: 'white', border: 'none', borderRadius: '16px', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', cursor: 'pointer', boxShadow: '0 4px 15px rgba(139, 92, 246, 0.25)', transition: 'transform 0.1s' }}>
+              <button onClick={() => setEcraAtual('nova_encomenda')} style={{ ...btnPrimary, padding: '20px', borderRadius: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', backgroundColor: '#8b5cf6', boxShadow: '0 4px 15px rgba(139, 92, 246, 0.25)', border: 'none', color: 'white', cursor: 'pointer' }}>
                 <div style={{ backgroundColor: 'rgba(255,255,255,0.2)', padding: '12px', borderRadius: '50%' }}>
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                 </div>
                 <span style={{ fontWeight: '600', fontSize: '1.05rem' }}>Registar Entrada</span>
               </button>
               
-              <button onClick={() => setEcraAtual('escolher_expedicao')} style={{ backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '16px', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', cursor: 'pointer', boxShadow: '0 4px 15px rgba(59, 130, 246, 0.25)', transition: 'transform 0.1s' }}>
+              <button onClick={() => setEcraAtual('escolher_expedicao')} style={{ ...btnPrimary, padding: '20px', borderRadius: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', backgroundColor: '#3b82f6', boxShadow: '0 4px 15px rgba(59, 130, 246, 0.25)', border: 'none', color: 'white', cursor: 'pointer' }}>
                 <div style={{ backgroundColor: 'rgba(255,255,255,0.2)', padding: '12px', borderRadius: '50%' }}>
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                 </div>
@@ -234,22 +231,31 @@ export default function App() {
               </button>
             </div>
 
-            {/* OPERAÇÕES SECUNDÁRIAS */}
-            <h3 style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>Operações</h3>
+            <h3 style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>Painel de Controlo</h3>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <button onClick={() => setEcraAtual('encomendas_concluidas')} style={{...btnCard, padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'flex-start', border: '1px solid rgba(34, 197, 94, 0.3)'}}>
-                <div style={{ color: '#22c55e', display: 'flex' }}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
+              <button onClick={() => setEcraAtual('encomendas_pendentes')} style={{ ...btnCard, padding: '16px', display: 'flex', alignItems: 'center', gap: '10px', border: '1px solid rgba(234, 179, 8, 0.3)' }}>
+                <span style={{ fontSize: '1.2rem' }}>📋</span>
+                <span style={{ fontWeight: '500' }}>Pendentes</span>
+              </button>
+              
+              <button onClick={() => setEcraAtual('encomendas_concluidas')} style={{ ...btnCard, padding: '16px', display: 'flex', alignItems: 'center', gap: '10px', border: '1px solid rgba(34, 197, 94, 0.3)' }}>
+                <span style={{ fontSize: '1.2rem' }}>✅</span>
                 <span style={{ fontWeight: '500' }}>Concluídas</span>
               </button>
               
-              <button onClick={() => setEcraAtual('catalogo')} style={{...btnCard, padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'flex-start'}}>
-                <div style={{ color: '#a8a29e', display: 'flex' }}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg></div>
+              <button onClick={() => setEcraAtual('catalogo')} style={{ ...btnCard, padding: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontSize: '1.2rem' }}>🏷️</span>
                 <span style={{ fontWeight: '500' }}>Catálogo</span>
               </button>
+
+              <button onClick={() => setEcraAtual('relatorio')} style={{ ...btnCard, padding: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontSize: '1.2rem' }}>💰</span>
+                <span style={{ fontWeight: '500' }}>Faturação</span>
+              </button>
               
-              <button onClick={() => setEcraAtual('novo_produto')} style={{...btnCard, padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'center', gridColumn: 'span 2', backgroundColor: 'transparent', border: '1px dashed var(--border-color)'}}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                <span style={{ fontWeight: '500' }}>Adicionar Novo Produto</span>
+              <button onClick={() => setEcraAtual('novo_produto')} style={{ ...btnSecondary, padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', gridColumn: 'span 2', borderStyle: 'dashed' }}>
+                <span style={{ fontSize: '1.2rem' }}>➕</span>
+                <span style={{ fontWeight: '500' }}>Novo Produto</span>
               </button>
             </div>
           </div>
@@ -268,7 +274,6 @@ export default function App() {
         )}
       </main>
 
-      {/* NOVO MENU INFERIOR (BOTTOM NAVIGATION) */}
       <nav style={{
         position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)',
         width: '100%', maxWidth: '600px', backgroundColor: 'var(--surface-color)',
