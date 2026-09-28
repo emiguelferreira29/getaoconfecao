@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import type { Saida, Subcontrato, Encomenda } from '../App';
 
 type Props = {
@@ -11,6 +13,11 @@ type Props = {
 export default function Relatorio({ saidas, subcontratos, encomendas, anularOP }: Props) {
   const [detalheVisivel, setDetalheVisivel] = useState(false);
   const [opAtiva, setOpAtiva] = useState<any>(null);
+
+  // Estados para o Relatório PDF
+  const [mostrarFiltro, setMostrarFiltro] = useState(false);
+  const [dataInicio, setDataInicio] = useState('');
+  const [dataFim, setDataFim] = useState('');
 
   const agruparFinanceiroOP = () => {
     const ops: Record<string, { 
@@ -29,7 +36,6 @@ export default function Relatorio({ saidas, subcontratos, encomendas, anularOP }
       ops[op].faturado += Number(s.total_faturado);
       ops[op].saidas.push(s);
 
-      // Guardar a data de expedição (se houver várias saídas da mesma OP, guarda a mais recente)
       if (!ops[op].data_expedicao || new Date(s.data) > new Date(ops[op].data_expedicao!)) {
         ops[op].data_expedicao = s.data;
       }
@@ -41,14 +47,11 @@ export default function Relatorio({ saidas, subcontratos, encomendas, anularOP }
       ops[op].custo += Number(sub.custo_total);
       ops[op].subs.push(sub);
       
-      // Se tivermos um subcontrato mas ainda não houver data de expedição (por exemplo, OP ainda em aberto), 
-      // podemos usar a data do subcontrato como referência temporária de ordenação.
       if (!ops[op].data_expedicao || new Date(sub.data) > new Date(ops[op].data_expedicao!)) {
         ops[op].data_expedicao = sub.data;
       }
     });
 
-    // Adicionar a informação do Cliente Final cruzando com as Encomendas
     Object.keys(ops).forEach(opNum => {
       const enc = encomendas.find(e => e.op_numero === opNum && e.cliente_final);
       if (enc) {
@@ -56,7 +59,6 @@ export default function Relatorio({ saidas, subcontratos, encomendas, anularOP }
       }
     });
 
-    // NOVA ORDENAÇÃO: Da data mais recente para a mais antiga
     return Object.values(ops).sort((a, b) => {
       const dataA = a.data_expedicao ? new Date(a.data_expedicao).getTime() : 0;
       const dataB = b.data_expedicao ? new Date(b.data_expedicao).getTime() : 0;
@@ -75,9 +77,118 @@ export default function Relatorio({ saidas, subcontratos, encomendas, anularOP }
     setDetalheVisivel(true);
   };
 
+  // --- LÓGICA DO RELATÓRIO PDF POR DATAS ---
+  const carregarImagemBase64 = (url: string): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image(); img.crossOrigin = 'Anonymous'; img.src = url;
+      img.onload = () => {
+        const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) { ctx.drawImage(img, 0, 0); resolve(canvas.toDataURL('image/png')); } else { resolve(''); }
+      };
+      img.onerror = () => resolve('');
+    });
+  };
+
+  const gerarRelatorioPDF = async () => {
+    if (!dataInicio || !dataFim) {
+      alert("Por favor, selecione a Data de Início e a Data de Fim.");
+      return;
+    }
+
+    const inicio = new Date(dataInicio); inicio.setHours(0, 0, 0, 0);
+    const fim = new Date(dataFim); fim.setHours(23, 59, 59, 999);
+
+    // Filtrar saídas pelo intervalo de datas selecionado e ordenar cronologicamente
+    const saidasFiltradas = saidas.filter(s => {
+      const d = new Date(s.data);
+      return d >= inicio && d <= fim;
+    }).sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime());
+
+    if (saidasFiltradas.length === 0) {
+      alert("Não existem expedições/faturação registadas nestas datas.");
+      return;
+    }
+
+    const doc = new jsPDF();
+    try { 
+      const logoBase64 = await carregarImagemBase64('/logo.png'); 
+      if (logoBase64) doc.addImage(logoBase64, 'PNG', 14, 10, 22, 22); 
+    } catch (err) { 
+      console.warn('Erro a carregar logo', err); 
+    }
+
+    doc.setFontSize(16); doc.setTextColor(37, 99, 235); doc.text('Relatório de Faturação e Expedição', 40, 18);
+    doc.setFontSize(10); doc.setTextColor(100); 
+    doc.text(`Período de Análise: ${inicio.toLocaleDateString('pt-PT')} a ${fim.toLocaleDateString('pt-PT')}`, 40, 25);
+    doc.text(`Gerado a: ${new Date().toLocaleString('pt-PT')}`, 40, 31);
+    
+    const colunas = ['Data', 'OP', 'Artigo / Referência', 'Qtd', 'Faturado'];
+    const linhas = saidasFiltradas.map(s => [
+      new Date(s.data).toLocaleDateString('pt-PT'),
+      s.op_numero || 'Avulso',
+      s.artigo_nome,
+      s.quantidade.toString(),
+      `${Number(s.total_faturado).toFixed(2)} €`
+    ]);
+
+    autoTable(doc, { 
+      startY: 38, 
+      head: [colunas], 
+      body: linhas, 
+      theme: 'grid', 
+      headStyles: { fillColor: [37, 99, 235] }, 
+      styles: { fontSize: 9, cellPadding: 4 } 
+    });
+
+    const totalFaturadoPeriodo = saidasFiltradas.reduce((acc, s) => acc + Number(s.total_faturado), 0);
+    const totalPecasPeriodo = saidasFiltradas.reduce((acc, s) => acc + Number(s.quantidade), 0);
+    let finalY = (doc as any).lastAutoTable.finalY + 15;
+
+    doc.setFontSize(11); doc.setTextColor(0); 
+    doc.text(`Total de Peças Expedidas no Período: ${totalPecasPeriodo} un.`, 14, finalY);
+    
+    finalY += 8; 
+    doc.setFontSize(14); doc.setTextColor(34, 197, 94); 
+    doc.text(`Faturação Total no Período: ${totalFaturadoPeriodo.toFixed(2)} EUR`, 14, finalY);
+
+    doc.save(`Relatorio_Faturacao_${dataInicio}_a_${dataFim}.pdf`);
+    setMostrarFiltro(false); // Fecha o painel após gerar
+  };
+
   return (
     <div style={{ animation: 'fadeIn 0.3s' }}>
-      <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Faturação e Custos</h2>
+      
+      {/* CABEÇALHO COM BOTÃO DE EXPORTAÇÃO */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h2 style={{ fontSize: '1.5rem', margin: 0 }}>Faturação e Custos</h2>
+        <button 
+          onClick={() => setMostrarFiltro(!mostrarFiltro)} 
+          style={{ background: 'var(--surface-color)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}
+        >
+          📄 Exportar PDF
+        </button>
+      </div>
+
+      {/* PAINEL DE FILTRO DE DATAS */}
+      {mostrarFiltro && (
+        <div style={{ backgroundColor: 'var(--surface-color)', padding: '15px', borderRadius: '12px', marginBottom: '25px', border: '1px solid #3b82f6', animation: 'fadeIn 0.2s' }}>
+          <h3 style={{ margin: '0 0 15px 0', fontSize: '1rem', color: '#3b82f6' }}>Relatório Interno por Datas</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '5px' }}>Data Início</label>
+              <input type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-color)', color: 'white', colorScheme: 'dark' }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '5px' }}>Data Fim</label>
+              <input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-color)', color: 'white', colorScheme: 'dark' }} />
+            </div>
+          </div>
+          <button onClick={gerarRelatorioPDF} style={{ width: '100%', padding: '12px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>
+            📥 Descarregar PDF do Período
+          </button>
+        </div>
+      )}
       
       {/* PAINEL DE TOTAIS GLOBAIS */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '25px' }}>
@@ -106,7 +217,6 @@ export default function Relatorio({ saidas, subcontratos, encomendas, anularOP }
                 <div style={{ backgroundColor: 'rgba(255,255,255,0.03)', padding: '15px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   
                   <div>
-                    {/* NÚMERO DA OP AGORA É CLICÁVEL */}
                     <strong 
                       onClick={() => abrirDetalhe(grupo)}
                       style={{ fontSize: '1.2rem', color: '#3b82f6', cursor: 'pointer', textDecoration: 'underline', display: 'block' }}
@@ -114,8 +224,6 @@ export default function Relatorio({ saidas, subcontratos, encomendas, anularOP }
                     >
                       {grupo.op_numero}
                     </strong>
-
-                    {/* DATA DE EXPEDIÇÃO AQUI */}
                     {grupo.data_expedicao && (
                       <small style={{ color: 'var(--text-secondary)', display: 'block', marginTop: '4px', fontSize: '0.8rem' }}>
                         📅 {new Date(grupo.data_expedicao).toLocaleDateString('pt-PT')}
@@ -147,7 +255,6 @@ export default function Relatorio({ saidas, subcontratos, encomendas, anularOP }
                     </div>
                   )}
 
-                  {/* BOTÃO PARA ANULAR A OP */}
                   {grupo.op_numero !== 'Avulso' && (
                     <button 
                       onClick={() => anularOP(grupo.op_numero)}
