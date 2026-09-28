@@ -3,9 +3,10 @@ import type { Saida, Subcontrato } from '../App';
 type Props = {
   saidas: Saida[];
   subcontratos: Subcontrato[];
+  anularOP: (op_numero: string) => void;
 };
 
-export default function Relatorio({ saidas, subcontratos }: Props) {
+export default function Relatorio({ saidas, subcontratos, anularOP }: Props) {
   
   // Agrupar financeiramente por Ordem de Produção (OP)
   const agruparFinanceiroOP = () => {
@@ -83,7 +84,7 @@ export default function Relatorio({ saidas, subcontratos }: Props) {
                   </div>
                   
                   {grupo.subs.length > 0 && (
-                    <div style={{ borderTop: '1px dashed rgba(255,255,255,0.1)', paddingTop: '10px' }}>
+                    <div style={{ borderTop: '1px dashed rgba(255,255,255,0.1)', paddingTop: '10px', marginTop: '5px' }}>
                       <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', display: 'block', marginBottom: '5px' }}>Custos (Subcontratação):</span>
                       {grupo.subs.map(sub => (
                         <div key={sub.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginLeft: '10px', marginBottom: '4px' }}>
@@ -93,6 +94,21 @@ export default function Relatorio({ saidas, subcontratos }: Props) {
                       ))}
                     </div>
                   )}
+
+                  {/* BOTÃO PARA ANULAR A OP */}
+                  {grupo.op_numero !== 'Avulso' && (
+                    <button 
+                      onClick={() => anularOP(grupo.op_numero)}
+                      style={{
+                        marginTop: '15px', padding: '10px', backgroundColor: 'transparent',
+                        border: '1px dashed #ef4444', color: '#ef4444', borderRadius: '8px',
+                        cursor: 'pointer', width: '100%', fontWeight: 'bold'
+                      }}
+                    >
+                      ↩️ Anular OP e Repor nos Pendentes
+                    </button>
+                  )}
+
                 </div>
               </div>
             );

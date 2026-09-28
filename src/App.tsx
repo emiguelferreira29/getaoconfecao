@@ -112,6 +112,44 @@ export default function App() {
     setOpSelecionada(op_numero); setModoExpedicao('op'); setListaExpedicao([]); setEcraAtual('resumo_expedicao');
   };
 
+  // --- NOVA FUNÇÃO PARA ANULAR OP DA FATURAÇÃO E REPOR NOS PENDENTES ---
+  const anularOP = async (op_numero: string) => {
+    if (!window.confirm(`ATENÇÃO!\nTem a certeza que deseja anular a OP ${op_numero}?\n\nIsto irá apagar as guias, os custos e o valor faturado. As peças voltarão para os Pendentes.`)) return;
+    
+    try {
+      // 1. Ir buscar as saídas desta OP para sabermos que quantidades repor
+      const { data: saidasDaOp } = await supabase.from('saidas').select('*').eq('op_numero', op_numero);
+      
+      const qtdPorArtigo: Record<string, number> = {};
+      if (saidasDaOp) {
+        saidasDaOp.forEach(s => {
+           if(!qtdPorArtigo[s.artigo_codigo]) qtdPorArtigo[s.artigo_codigo] = 0;
+           qtdPorArtigo[s.artigo_codigo] += s.quantidade;
+        });
+      }
+
+      // 2. Repor as quantidades originais e mudar estado para pendente
+      const { data: encomendasDaOp } = await supabase.from('encomendas').select('*').eq('op_numero', op_numero);
+      
+      if (encomendasDaOp) {
+         for (const enc of encomendasDaOp) {
+            const qtdReposta = qtdPorArtigo[enc.artigo_codigo] || 0;
+            const novaQtd = enc.quantidade_pedida + qtdReposta;
+            await supabase.from('encomendas').update({ estado: 'pendente', quantidade_pedida: novaQtd }).eq('id', enc.id);
+         }
+      }
+
+      // 3. Apagar as faturas (saídas) e os custos (subcontratos)
+      await supabase.from('saidas').delete().eq('op_numero', op_numero);
+      await supabase.from('subcontratos').delete().eq('op_numero', op_numero);
+
+      mostrarAlerta('Sucesso', `A OP ${op_numero} foi anulada com sucesso e voltou aos Pendentes!`, 'sucesso');
+      carregarDados();
+    } catch (error: any) {
+      mostrarAlerta('Erro', error.message, 'erro');
+    }
+  };
+
   const pedirConfirmacaoApagar = (id: number, tipo: 'saida' | 'artigo') => { setModalConfirmacao({ aberto: true, tipo, idParaApagar: id }); };
   const pedirConfirmacaoApagarEncomenda = (op_numero: string) => { setModalConfirmacao({ aberto: true, tipo: 'encomenda_inteira', idParaApagar: op_numero }); };
   const cancelarModal = () => setModalConfirmacao({ aberto: false, tipo: null, idParaApagar: null });
@@ -183,7 +221,6 @@ export default function App() {
     );
   }
 
-  // ECRÃ DE CARREGAMENTO (SPLASH SCREEN) COM O LOGÓTIPO MAIOR
   if (aCarregar) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', backgroundColor: 'var(--bg-color)', gap: '20px', animation: 'fadeIn 0.3s' }}>
@@ -199,7 +236,6 @@ export default function App() {
       <header style={{ padding: '15px 20px', backgroundColor: 'var(--surface-color)', borderBottom: '1px solid var(--border-color)', position: 'sticky', top: 0, zIndex: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <img src="/logo.png" alt="Logótipo" style={{ height: '32px', width: '32px', objectFit: 'contain', borderRadius: '8px' }} />
-          {/* A SUA ALTERAÇÃO NO TÍTULO MANTIDA AQUI */}
           <h1 style={{ fontSize: '1.2rem', margin: 0, color: 'var(--text-primary)', fontWeight: '600' }}>M&J Tailors - Confeção</h1>
         </div>
         <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
@@ -276,7 +312,9 @@ export default function App() {
         {ecraAtual === 'nova_encomenda' && <NovaEncomenda artigos={artigos} setEcraAtual={setEcraAtual} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} />}
         {ecraAtual === 'encomendas_pendentes' && <EncomendasPendentes artigos={artigos} encomendas={encomendas} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} pedirConfirmacaoApagarEncomenda={pedirConfirmacaoApagarEncomenda} iniciarExpedicaoDePendente={iniciarExpedicaoDePendente} />}
         {ecraAtual === 'encomendas_concluidas' && <EncomendasConcluidas encomendas={encomendas} saidas={saidas} agruparSaidas={agruparSaidas} gerarPDF={gerarPDF} pedirConfirmacaoApagarEncomenda={pedirConfirmacaoApagarEncomenda} />}
-        {ecraAtual === 'relatorio' && <Relatorio saidas={saidas} subcontratos={subcontratos} />}
+        
+        {/* Passamos a nova função de anularOP para o Relatório */}
+        {ecraAtual === 'relatorio' && <Relatorio saidas={saidas} subcontratos={subcontratos} anularOP={anularOP} />}
         
         {['escolher_expedicao', 'resumo_expedicao', 'scanner', 'formulario_saida'].includes(ecraAtual) && (
           <Expedicao ecraAtual={ecraAtual} setEcraAtual={setEcraAtual} artigos={artigos} saidas={saidas} encomendas={encomendas} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} listaExpedicao={listaExpedicao} setListaExpedicao={setListaExpedicao} modoExpedicao={modoExpedicao} setModoExpedicao={setModoExpedicao} opSelecionada={opSelecionada} setOpSelecionada={setOpSelecionada} />
