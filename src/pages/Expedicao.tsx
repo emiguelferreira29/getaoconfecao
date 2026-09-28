@@ -108,7 +108,22 @@ export default function Expedicao({
     if (!artigoSelecionado) return;
     const qtdNum = parseInt(formQtd);
     if (isNaN(qtdNum) || qtdNum <= 0) return;
+    
     const opAUsar = modoExpedicao === 'op' ? opSelecionada : formOP;
+
+    // --- NOVA BARREIRA DE SEGURANÇA (VERIFICA SE A OP ESCRITA À MÃO ESTÁ NOS PENDENTES) ---
+    if (modoExpedicao === 'livre' && opAUsar) {
+      const opPendente = encomendas.some(enc => enc.op_numero.toUpperCase() === opAUsar.toUpperCase() && enc.estado === 'pendente');
+      if (opPendente) {
+        return mostrarAlerta(
+          'Atenção!', 
+          `A OP ${opAUsar} existe nos Pendentes.\n\nPara que o sistema desconte as quantidades automaticamente, volte ao ecrã anterior e escolha a "Expedição por OP" em vez da Expedição Livre.`, 
+          'erro'
+        );
+      }
+    }
+    // -----------------------------------------------------------------------------------
+
     const novoItem: ItemExpedicao = { 
       artigo_codigo: artigoSelecionado.codigo, artigo_nome: artigoSelecionado.nome, 
       quantidade: qtdNum, total_faturado: qtdNum * artigoSelecionado.preco, 
