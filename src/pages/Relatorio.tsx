@@ -33,7 +33,8 @@ export default function Relatorio({ saidas, subcontratos, encomendas, anularOP }
     Object.keys(ops).forEach(opNum => {
       const enc = encomendas.find(e => e.op_numero === opNum && e.cliente_final);
       if (enc) {
-        ops[opNum].cliente_final = enc.cliente_final;
+        // O "|| null" resolve o erro do TypeScript de "undefined"
+        ops[opNum].cliente_final = enc.cliente_final || null;
       }
     });
 
