@@ -13,18 +13,31 @@ export default function Relatorio({ saidas, subcontratos, encomendas, anularOP }
   const [opAtiva, setOpAtiva] = useState<any>(null);
 
   const agruparFinanceiroOP = () => {
-    const ops: Record<string, { op_numero: string; faturado: number; custo: number; saidas: Saida[]; subs: Subcontrato[]; cliente_final: string | null }> = {};
+    const ops: Record<string, { 
+      op_numero: string; 
+      faturado: number; 
+      custo: number; 
+      saidas: Saida[]; 
+      subs: Subcontrato[]; 
+      cliente_final: string | null;
+      data_expedicao: string | null; // <- NOVO CAMPO PARA A DATA
+    }> = {};
     
     saidas.forEach(s => {
       const op = s.op_numero || 'Avulso';
-      if (!ops[op]) ops[op] = { op_numero: op, faturado: 0, custo: 0, saidas: [], subs: [], cliente_final: null };
+      if (!ops[op]) ops[op] = { op_numero: op, faturado: 0, custo: 0, saidas: [], subs: [], cliente_final: null, data_expedicao: null };
       ops[op].faturado += Number(s.total_faturado);
       ops[op].saidas.push(s);
+
+      // Guardar a data de expedição (se houver várias saídas da mesma OP, guarda a mais recente)
+      if (!ops[op].data_expedicao || new Date(s.data) > new Date(ops[op].data_expedicao!)) {
+        ops[op].data_expedicao = s.data;
+      }
     });
 
     subcontratos.forEach(sub => {
       const op = sub.op_numero;
-      if (!ops[op]) ops[op] = { op_numero: op, faturado: 0, custo: 0, saidas: [], subs: [], cliente_final: null };
+      if (!ops[op]) ops[op] = { op_numero: op, faturado: 0, custo: 0, saidas: [], subs: [], cliente_final: null, data_expedicao: null };
       ops[op].custo += Number(sub.custo_total);
       ops[op].subs.push(sub);
     });
@@ -33,7 +46,6 @@ export default function Relatorio({ saidas, subcontratos, encomendas, anularOP }
     Object.keys(ops).forEach(opNum => {
       const enc = encomendas.find(e => e.op_numero === opNum && e.cliente_final);
       if (enc) {
-        // O "|| null" resolve o erro do TypeScript de "undefined"
         ops[opNum].cliente_final = enc.cliente_final || null;
       }
     });
@@ -82,14 +94,23 @@ export default function Relatorio({ saidas, subcontratos, encomendas, anularOP }
               <div key={grupo.op_numero} style={{ backgroundColor: 'var(--surface-color)', border: '1px solid var(--border-color)', borderRadius: '12px', overflow: 'hidden' }}>
                 <div style={{ backgroundColor: 'rgba(255,255,255,0.03)', padding: '15px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   
-                  {/* NÚMERO DA OP AGORA É CLICÁVEL */}
-                  <strong 
-                    onClick={() => abrirDetalhe(grupo)}
-                    style={{ fontSize: '1.2rem', color: '#3b82f6', cursor: 'pointer', textDecoration: 'underline' }}
-                    title="Clique para ver os artigos"
-                  >
-                    {grupo.op_numero}
-                  </strong>
+                  <div>
+                    {/* NÚMERO DA OP AGORA É CLICÁVEL */}
+                    <strong 
+                      onClick={() => abrirDetalhe(grupo)}
+                      style={{ fontSize: '1.2rem', color: '#3b82f6', cursor: 'pointer', textDecoration: 'underline', display: 'block' }}
+                      title="Clique para ver os artigos"
+                    >
+                      {grupo.op_numero}
+                    </strong>
+
+                    {/* DATA DE EXPEDIÇÃO AQUI */}
+                    {grupo.data_expedicao && (
+                      <small style={{ color: 'var(--text-secondary)', display: 'block', marginTop: '4px', fontSize: '0.8rem' }}>
+                        📅 {new Date(grupo.data_expedicao).toLocaleDateString('pt-PT')}
+                      </small>
+                    )}
+                  </div>
                   
                   <div style={{ textAlign: 'right' }}>
                     <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: lucro >= 0 ? '#22c55e' : '#ef4444' }}>
