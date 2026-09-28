@@ -112,14 +112,11 @@ export default function App() {
     setOpSelecionada(op_numero); setModoExpedicao('op'); setListaExpedicao([]); setEcraAtual('resumo_expedicao');
   };
 
-  // --- NOVA FUNÇÃO PARA ANULAR OP DA FATURAÇÃO E REPOR NOS PENDENTES ---
   const anularOP = async (op_numero: string) => {
     if (!window.confirm(`ATENÇÃO!\nTem a certeza que deseja anular a OP ${op_numero}?\n\nIsto irá apagar as guias, os custos e o valor faturado. As peças voltarão para os Pendentes.`)) return;
     
     try {
-      // 1. Ir buscar as saídas desta OP para sabermos que quantidades repor
       const { data: saidasDaOp } = await supabase.from('saidas').select('*').eq('op_numero', op_numero);
-      
       const qtdPorArtigo: Record<string, number> = {};
       if (saidasDaOp) {
         saidasDaOp.forEach(s => {
@@ -128,9 +125,7 @@ export default function App() {
         });
       }
 
-      // 2. Repor as quantidades originais e mudar estado para pendente
       const { data: encomendasDaOp } = await supabase.from('encomendas').select('*').eq('op_numero', op_numero);
-      
       if (encomendasDaOp) {
          for (const enc of encomendasDaOp) {
             const qtdReposta = qtdPorArtigo[enc.artigo_codigo] || 0;
@@ -139,7 +134,6 @@ export default function App() {
          }
       }
 
-      // 3. Apagar as faturas (saídas) e os custos (subcontratos)
       await supabase.from('saidas').delete().eq('op_numero', op_numero);
       await supabase.from('subcontratos').delete().eq('op_numero', op_numero);
 
@@ -313,8 +307,8 @@ export default function App() {
         {ecraAtual === 'encomendas_pendentes' && <EncomendasPendentes artigos={artigos} encomendas={encomendas} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} pedirConfirmacaoApagarEncomenda={pedirConfirmacaoApagarEncomenda} iniciarExpedicaoDePendente={iniciarExpedicaoDePendente} />}
         {ecraAtual === 'encomendas_concluidas' && <EncomendasConcluidas encomendas={encomendas} saidas={saidas} agruparSaidas={agruparSaidas} gerarPDF={gerarPDF} pedirConfirmacaoApagarEncomenda={pedirConfirmacaoApagarEncomenda} />}
         
-        {/* Passamos a nova função de anularOP para o Relatório */}
-        {ecraAtual === 'relatorio' && <Relatorio saidas={saidas} subcontratos={subcontratos} anularOP={anularOP} />}
+        {/* Adicionámos a prop `encomendas` aqui */}
+        {ecraAtual === 'relatorio' && <Relatorio saidas={saidas} subcontratos={subcontratos} encomendas={encomendas} anularOP={anularOP} />}
         
         {['escolher_expedicao', 'resumo_expedicao', 'scanner', 'formulario_saida'].includes(ecraAtual) && (
           <Expedicao ecraAtual={ecraAtual} setEcraAtual={setEcraAtual} artigos={artigos} saidas={saidas} encomendas={encomendas} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} listaExpedicao={listaExpedicao} setListaExpedicao={setListaExpedicao} modoExpedicao={modoExpedicao} setModoExpedicao={setModoExpedicao} opSelecionada={opSelecionada} setOpSelecionada={setOpSelecionada} />
