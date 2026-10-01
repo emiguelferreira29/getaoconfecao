@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { supabase } from '../supabase';
 import { inputStyle } from '../components/Modais';
 import type { Artigo } from '../App';
+import jsPDF from 'jspdf';
 
 type Props = {
   artigos: Artigo[];
@@ -28,7 +29,6 @@ export default function Catalogo({ artigos, carregarDados, pedirConfirmacaoApaga
     const precoNum = parseFloat(precoEditado.replace(',', '.'));
     const custoNum = parseFloat(custoEditado.replace(',', '.')) || 0;
     
-    // Verificação de segurança (impede guardar se o nome ou o código estiverem vazios)
     if (!nomeEditado || !codigoEditado || isNaN(precoNum) || precoNum < 0) return; 
     
     const { error } = await supabase.from('artigos').update({ 
@@ -44,6 +44,39 @@ export default function Catalogo({ artigos, carregarDados, pedirConfirmacaoApaga
     }
   };
 
+  // FUNÇÃO MÁGICA TAMBÉM NO CATÁLOGO
+  const gerarPDFComQR = async (codigo: string, nome: string) => {
+    try {
+      const response = await fetch(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(codigo)}`);
+      const blob = await response.blob();
+      
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64data = reader.result as string;
+        const doc = new jsPDF();
+        
+        doc.setFontSize(22);
+        doc.setTextColor(37, 99, 235);
+        doc.text('Etiqueta de Artigo', 105, 30, { align: 'center' });
+        
+        doc.setFontSize(18);
+        doc.setTextColor(0);
+        doc.text(nome, 105, 50, { align: 'center' });
+        
+        doc.setFontSize(14);
+        doc.setTextColor(100);
+        doc.text(codigo, 105, 60, { align: 'center' });
+        
+        doc.addImage(base64data, 'PNG', 55, 75, 100, 100);
+        
+        doc.save(`QR_${codigo}.pdf`);
+      };
+      reader.readAsDataURL(blob);
+    } catch (err) {
+      console.error('Erro ao gerar QR Code:', err);
+    }
+  };
+
   return (
     <div style={{ animation: 'fadeIn 0.3s' }}>
       <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Catálogo ({artigos.length})</h2>
@@ -53,7 +86,6 @@ export default function Catalogo({ artigos, carregarDados, pedirConfirmacaoApaga
             
             {editandoId !== artigo.id ? (
               <>
-                {/* VISTA NORMAL */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div>
                     <strong style={{ display: 'block', fontSize: '1.1rem' }}>{artigo.nome}</strong>
@@ -61,6 +93,9 @@ export default function Catalogo({ artigos, carregarDados, pedirConfirmacaoApaga
                   </div>
                   
                   <div style={{ display: 'flex', gap: '5px' }}>
+                    {/* NOVO BOTÃO DE IMPRIMIR QR CODE */}
+                    <button onClick={() => gerarPDFComQR(artigo.codigo, artigo.nome)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.4rem' }} title="Imprimir QR Code">🖨️</button>
+                    
                     <button onClick={() => iniciarEdicao(artigo)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem' }} title="Editar Artigo">✏️</button>
                     <button onClick={() => pedirConfirmacaoApagar(artigo.id, 'artigo')} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.2rem' }} title="Apagar Artigo">🗑️</button>
                   </div>
@@ -73,7 +108,6 @@ export default function Catalogo({ artigos, carregarDados, pedirConfirmacaoApaga
               </>
             ) : (
               <>
-                {/* MODO DE EDIÇÃO ABERTO */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   <div>
                     <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Nome do Artigo</label>
