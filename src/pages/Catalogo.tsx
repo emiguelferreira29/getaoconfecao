@@ -16,6 +16,9 @@ export default function Catalogo({ artigos, carregarDados, pedirConfirmacaoApaga
   const [codigoEditado, setCodigoEditado] = useState('');
   const [precoEditado, setPrecoEditado] = useState<string>('');
   const [custoEditado, setCustoEditado] = useState<string>('');
+  
+  // Novo estado para mostrar ao utilizador que o PDF geral está a ser gerado
+  const [gerandoTodosPDF, setGerandoTodosPDF] = useState(false);
 
   const iniciarEdicao = (artigo: Artigo) => {
     setEditandoId(artigo.id);
@@ -44,7 +47,7 @@ export default function Catalogo({ artigos, carregarDados, pedirConfirmacaoApaga
     }
   };
 
-  // FUNÇÃO MÁGICA TAMBÉM NO CATÁLOGO
+  // FUNÇÃO 1: Imprimir apenas 1 QR Code (Etiqueta Grande)
   const gerarPDFComQR = async (codigo: string, nome: string) => {
     try {
       const response = await fetch(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(codigo)}`);
@@ -77,9 +80,106 @@ export default function Catalogo({ artigos, carregarDados, pedirConfirmacaoApaga
     }
   };
 
+  // FUNÇÃO 2: Imprimir TODOS os QR Codes numa grelha (A4)
+  const gerarPDFTodosQRs = async () => {
+    if (artigos.length === 0) return;
+    setGerandoTodosPDF(true);
+    
+    try {
+      const doc = new jsPDF();
+      const colunas = 3;
+      const linhas = 5;
+      const itensPorPagina = colunas * linhas; // 15 etiquetas por página
+      
+      const margemX = 10;
+      const margemY = 10;
+      const larguraPagina = 210; // Folha A4
+      const alturaPagina = 297; // Folha A4
+      
+      const larguraCelula = (larguraPagina - 2 * margemX) / colunas; 
+      const alturaCelula = (alturaPagina - 2 * margemY) / linhas; 
+      const qrSize = 35; // Tamanho do QR Code em mm
+
+      // Percorre todos os artigos do catálogo sequencialmente
+      for (let i = 0; i < artigos.length; i++) {
+        const artigo = artigos[i];
+        
+        // Vai buscar o QR Code
+        const response = await fetch(`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(artigo.codigo)}`);
+        const blob = await response.blob();
+        const base64data = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(blob);
+        });
+
+        const indexNaPagina = i % itensPorPagina;
+        
+        // Adiciona uma nova folha se passar das 15 etiquetas
+        if (indexNaPagina === 0 && i !== 0) {
+          doc.addPage();
+        }
+
+        const col = indexNaPagina % colunas;
+        const row = Math.floor(indexNaPagina / colunas);
+
+        // Calcula a posição (X, Y) exata da célula atual na grelha
+        const x = margemX + col * larguraCelula;
+        const y = margemY + row * alturaCelula;
+
+        // Desenhar a linha de corte (Tracejado suave)
+        doc.setDrawColor(200);
+        doc.setLineDashPattern([1, 1], 0);
+        doc.rect(x, y, larguraCelula, alturaCelula);
+        doc.setLineDashPattern([], 0); // Limpar o estilo tracejado para o resto
+
+        // Desenhar a Imagem do QR Code centrada na célula
+        const qrX = x + (larguraCelula - qrSize) / 2;
+        const qrY = y + 8;
+        doc.addImage(base64data, 'PNG', qrX, qrY, qrSize, qrSize);
+
+        // Escrever o Nome do Artigo (Cortar o nome se for demasiado comprido)
+        doc.setFontSize(10);
+        doc.setTextColor(0);
+        let nomeLimpo = artigo.nome;
+        if (nomeLimpo.length > 22) nomeLimpo = nomeLimpo.substring(0, 20) + '...';
+        doc.text(nomeLimpo, x + larguraCelula / 2, qrY + qrSize + 7, { align: 'center' });
+        
+        // Escrever o Código do Artigo
+        doc.setFontSize(9);
+        doc.setTextColor(100);
+        doc.text(artigo.codigo, x + larguraCelula / 2, qrY + qrSize + 12, { align: 'center' });
+      }
+
+      doc.save('Grelha_Etiquetas_M&J_Tailors.pdf');
+    } catch (err) {
+      console.error('Erro ao gerar grelha de QR Codes:', err);
+      alert('Ocorreu um erro a gerar o PDF.');
+    } finally {
+      setGerandoTodosPDF(false); // Retira o estado de "A carregar"
+    }
+  };
+
   return (
     <div style={{ animation: 'fadeIn 0.3s' }}>
-      <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Catálogo ({artigos.length})</h2>
+      
+      {/* CABEÇALHO DO CATÁLOGO COM O NOVO BOTÃO DE GRELHA */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h2 style={{ fontSize: '1.5rem', margin: 0 }}>Catálogo ({artigos.length})</h2>
+        <button 
+          onClick={gerarPDFTodosQRs}
+          disabled={gerandoTodosPDF}
+          style={{ 
+            backgroundColor: 'var(--surface-color)', border: '1px solid #3b82f6', color: '#3b82f6', 
+            padding: '8px 12px', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.85rem',
+            cursor: gerandoTodosPDF ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
+            opacity: gerandoTodosPDF ? 0.6 : 1
+          }}
+        >
+          {gerandoTodosPDF ? '⏳ A gerar PDF...' : '🖨️ Imprimir Todas Etiquetas'}
+        </button>
+      </div>
+
       <div style={{ display: 'grid', gap: '10px' }}>
         {artigos.map(artigo => (
           <div key={artigo.id} style={{ backgroundColor: 'var(--surface-color)', padding: '15px', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -93,9 +193,7 @@ export default function Catalogo({ artigos, carregarDados, pedirConfirmacaoApaga
                   </div>
                   
                   <div style={{ display: 'flex', gap: '5px' }}>
-                    {/* NOVO BOTÃO DE IMPRIMIR QR CODE */}
-                    <button onClick={() => gerarPDFComQR(artigo.codigo, artigo.nome)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.4rem' }} title="Imprimir QR Code">🖨️</button>
-                    
+                    <button onClick={() => gerarPDFComQR(artigo.codigo, artigo.nome)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.4rem' }} title="Imprimir Etiqueta Única">🖨️</button>
                     <button onClick={() => iniciarEdicao(artigo)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem' }} title="Editar Artigo">✏️</button>
                     <button onClick={() => pedirConfirmacaoApagar(artigo.id, 'artigo')} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.2rem' }} title="Apagar Artigo">🗑️</button>
                   </div>
