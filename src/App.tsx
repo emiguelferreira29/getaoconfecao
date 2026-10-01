@@ -17,6 +17,7 @@ import EncomendasPendentes from './pages/EncomendasPendentes';
 import EncomendasConcluidas from './pages/EncomendasConcluidas';
 import Relatorio from './pages/Relatorio';
 import Expedicao from './pages/Expedicao';
+import Subcontratos from './pages/Subcontratos'; // <- IMPORTÁMOS A PÁGINA NOVA AQUI
 
 // --- TIPOS DE DADOS ---
 export type Artigo = { id: number; codigo: string; nome: string; preco: number; custo_subcontratacao: number; };
@@ -24,7 +25,7 @@ export type Saida = { id: number; artigo_codigo: string; artigo_nome: string; qu
 export type ItemExpedicao = { artigo_codigo: string; artigo_nome: string; quantidade: number; total_faturado: number; op_numero: string; tamanho: string; };
 export type Encomenda = { id: number; op_numero: string; artigo_codigo: string; artigo_nome: string; quantidade_pedida: number; estado: string; data_entrega?: string | null; cliente_final?: string | null; };
 export type Subcontrato = { id: number; op_numero: string; artigo_nome: string; quantidade: number; custo_total: number; subcontratado_a: string; data: string; };
-export type Ecra = 'home' | 'catalogo' | 'novo_produto' | 'resumo_expedicao' | 'scanner' | 'formulario_saida' | 'relatorio' | 'nova_encomenda' | 'escolher_expedicao' | 'encomendas_pendentes' | 'encomendas_concluidas';
+export type Ecra = 'home' | 'catalogo' | 'novo_produto' | 'resumo_expedicao' | 'scanner' | 'formulario_saida' | 'relatorio' | 'nova_encomenda' | 'escolher_expedicao' | 'encomendas_pendentes' | 'encomendas_concluidas' | 'subcontratos';
 
 export default function App() {
   const [autenticado, setAutenticado] = useState<boolean>(() => sessionStorage.getItem('autenticadoConfecao') === 'true');
@@ -271,6 +272,8 @@ export default function App() {
             </div>
 
             <h3 style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>Painel de Controlo</h3>
+            
+            {/* A GRELHA AGORA ESTÁ PERFEITAMENTE ALINHADA COM 6 BOTÕES (3 FILAS DE 2) */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <button onClick={() => setEcraAtual('encomendas_pendentes')} style={{ ...btnCard, padding: '16px', display: 'flex', alignItems: 'center', gap: '10px', border: '1px solid rgba(234, 179, 8, 0.3)' }}>
                 <span style={{ fontSize: '1.2rem' }}>📋</span>
@@ -282,17 +285,22 @@ export default function App() {
                 <span style={{ fontWeight: '500' }}>Concluídas</span>
               </button>
               
-              <button onClick={() => setEcraAtual('catalogo')} style={{ ...btnCard, padding: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ fontSize: '1.2rem' }}>🏷️</span>
-                <span style={{ fontWeight: '500' }}>Catálogo</span>
-              </button>
-
               <button onClick={() => setEcraAtual('relatorio')} style={{ ...btnCard, padding: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <span style={{ fontSize: '1.2rem' }}>💰</span>
                 <span style={{ fontWeight: '500' }}>Faturação</span>
               </button>
+
+              <button onClick={() => setEcraAtual('subcontratos')} style={{ ...btnCard, padding: '16px', display: 'flex', alignItems: 'center', gap: '10px', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
+                <span style={{ fontSize: '1.2rem' }}>🤝</span>
+                <span style={{ fontWeight: '500' }}>Subcontratos</span>
+              </button>
+
+              <button onClick={() => setEcraAtual('catalogo')} style={{ ...btnCard, padding: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontSize: '1.2rem' }}>🏷️</span>
+                <span style={{ fontWeight: '500' }}>Catálogo</span>
+              </button>
               
-              <button onClick={() => setEcraAtual('novo_produto')} style={{ ...btnSecondary, padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', gridColumn: 'span 2', borderStyle: 'dashed' }}>
+              <button onClick={() => setEcraAtual('novo_produto')} style={{ ...btnSecondary, padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', borderStyle: 'dashed' }}>
                 <span style={{ fontSize: '1.2rem' }}>➕</span>
                 <span style={{ fontWeight: '500' }}>Novo Produto</span>
               </button>
@@ -306,9 +314,8 @@ export default function App() {
         {ecraAtual === 'nova_encomenda' && <NovaEncomenda artigos={artigos} setEcraAtual={setEcraAtual} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} />}
         {ecraAtual === 'encomendas_pendentes' && <EncomendasPendentes artigos={artigos} encomendas={encomendas} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} pedirConfirmacaoApagarEncomenda={pedirConfirmacaoApagarEncomenda} iniciarExpedicaoDePendente={iniciarExpedicaoDePendente} />}
         {ecraAtual === 'encomendas_concluidas' && <EncomendasConcluidas encomendas={encomendas} saidas={saidas} agruparSaidas={agruparSaidas} gerarPDF={gerarPDF} pedirConfirmacaoApagarEncomenda={pedirConfirmacaoApagarEncomenda} />}
-        
-        {/* Adicionámos a prop `encomendas` aqui */}
         {ecraAtual === 'relatorio' && <Relatorio saidas={saidas} subcontratos={subcontratos} encomendas={encomendas} anularOP={anularOP} />}
+        {ecraAtual === 'subcontratos' && <Subcontratos subcontratos={subcontratos} />}
         
         {['escolher_expedicao', 'resumo_expedicao', 'scanner', 'formulario_saida'].includes(ecraAtual) && (
           <Expedicao ecraAtual={ecraAtual} setEcraAtual={setEcraAtual} artigos={artigos} saidas={saidas} encomendas={encomendas} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} listaExpedicao={listaExpedicao} setListaExpedicao={setListaExpedicao} modoExpedicao={modoExpedicao} setModoExpedicao={setModoExpedicao} opSelecionada={opSelecionada} setOpSelecionada={setOpSelecionada} />
