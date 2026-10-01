@@ -1,23 +1,43 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { btnPrimary, inputStyle, labelStyle } from '../components/Modais';
+import type { Artigo } from '../App';
 
 type Props = {
+  artigos: Artigo[];
   setEcraAtual: (ecra: any) => void;
   carregarDados: () => void;
   mostrarAlerta: (titulo: string, mensagem: string, tipo: 'sucesso'|'erro'|'aviso') => void;
 };
 
-export default function NovoProduto({ setEcraAtual, carregarDados, mostrarAlerta }: Props) {
+export default function NovoProduto({ artigos, setEcraAtual, carregarDados, mostrarAlerta }: Props) {
   const [novoCod, setNovoCod] = useState('');
   const [novoNome, setNovoNome] = useState('');
   const [novoPreco, setNovoPreco] = useState('');
   const [novoCustoSub, setNovoCustoSub] = useState('');
 
+  // Esta função analisa todos os códigos existentes e gera o próximo número automaticamente
+  useEffect(() => {
+    let maxNum = 0;
+    
+    artigos.forEach(a => {
+      // Extrai os números do código (seja ele ART-012, ART12 ou apenas 12)
+      const parts = a.codigo.match(/\d+/);
+      if (parts) {
+        const num = parseInt(parts[0], 10);
+        if (num > maxNum) maxNum = num;
+      }
+    });
+    
+    const proximoNum = maxNum + 1;
+    // Formata o número para ter sempre 3 dígitos (ex: 013, 099, 100)
+    setNovoCod(`ART-${String(proximoNum).padStart(3, '0')}`);
+  }, [artigos]);
+
   const registarNovoProduto = async (e: React.FormEvent) => {
     e.preventDefault();
     const precoNum = parseFloat(novoPreco.replace(',', '.'));
-    const custoSubNum = parseFloat(novoCustoSub.replace(',', '.')) || 0; // Se não colocar nada, fica a zero
+    const custoSubNum = parseFloat(novoCustoSub.replace(',', '.')) || 0; 
     
     if (!novoCod || !novoNome || isNaN(precoNum)) {
       return mostrarAlerta('Atenção', 'Preencha todos os campos obrigatórios corretamente.', 'aviso');
@@ -34,7 +54,7 @@ export default function NovoProduto({ setEcraAtual, carregarDados, mostrarAlerta
       mostrarAlerta('Erro', error.message, 'erro');
     } else { 
       mostrarAlerta('Sucesso', 'Produto registado!', 'sucesso'); 
-      setNovoCod(''); setNovoNome(''); setNovoPreco(''); setNovoCustoSub('');
+      setNovoNome(''); setNovoPreco(''); setNovoCustoSub('');
       carregarDados(); 
       setEcraAtual('catalogo'); 
     }
@@ -44,22 +64,58 @@ export default function NovoProduto({ setEcraAtual, carregarDados, mostrarAlerta
     <div style={{ animation: 'fadeIn 0.3s' }}>
       <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Novo Produto</h2>
       <form onSubmit={registarNovoProduto} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+        
         <div>
-          <label style={labelStyle}>Código do Artigo (ex: ART-011)</label>
-          <input type="text" value={novoCod} onChange={e => setNovoCod(e.target.value)} required style={inputStyle} />
+          <label style={labelStyle}>Código do Artigo (Gerado Automaticamente)</label>
+          <input 
+            type="text" 
+            value={novoCod} 
+            readOnly 
+            style={{ 
+              ...inputStyle, 
+              backgroundColor: 'rgba(255,255,255,0.05)', 
+              color: 'var(--text-secondary)', 
+              cursor: 'not-allowed' 
+            }} 
+          />
         </div>
+        
         <div>
           <label style={labelStyle}>Nome do Artigo</label>
-          <input type="text" value={novoNome} onChange={e => setNovoNome(e.target.value)} required style={inputStyle} />
+          <input 
+            type="text" 
+            value={novoNome} 
+            onChange={e => setNovoNome(e.target.value)} 
+            required 
+            style={inputStyle} 
+            autoFocus 
+          />
         </div>
+        
         <div>
           <label style={labelStyle}>Preço de Venda / Faturação (€)</label>
-          <input type="number" step="0.01" value={novoPreco} onChange={e => setNovoPreco(e.target.value)} required style={inputStyle} />
+          <input 
+            type="number" 
+            step="0.01" 
+            value={novoPreco} 
+            onChange={e => setNovoPreco(e.target.value)} 
+            required 
+            style={inputStyle} 
+          />
         </div>
+        
         <div>
           <label style={labelStyle}>Custo de Subcontratação (€) - Opcional</label>
-          <input type="number" step="0.01" value={novoCustoSub} onChange={e => setNovoCustoSub(e.target.value)} placeholder="0.00" style={inputStyle} />
+          <input 
+            type="number" 
+            step="0.01" 
+            value={novoCustoSub} 
+            onChange={e => setNovoCustoSub(e.target.value)} 
+            placeholder="0.00" 
+            style={inputStyle} 
+          />
         </div>
+        
         <button type="submit" style={btnPrimary}>Guardar Produto</button>
       </form>
     </div>

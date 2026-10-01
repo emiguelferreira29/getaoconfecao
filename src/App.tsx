@@ -17,7 +17,7 @@ import EncomendasPendentes from './pages/EncomendasPendentes';
 import EncomendasConcluidas from './pages/EncomendasConcluidas';
 import Relatorio from './pages/Relatorio';
 import Expedicao from './pages/Expedicao';
-import Subcontratos from './pages/Subcontratos'; // <- IMPORTÁMOS A PÁGINA NOVA AQUI
+import Subcontratos from './pages/Subcontratos';
 
 // --- TIPOS DE DADOS ---
 export type Artigo = { id: number; codigo: string; nome: string; preco: number; custo_subcontratacao: number; };
@@ -273,7 +273,6 @@ export default function App() {
 
             <h3 style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>Painel de Controlo</h3>
             
-            {/* A GRELHA AGORA ESTÁ PERFEITAMENTE ALINHADA COM 6 BOTÕES (3 FILAS DE 2) */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <button onClick={() => setEcraAtual('encomendas_pendentes')} style={{ ...btnCard, padding: '16px', display: 'flex', alignItems: 'center', gap: '10px', border: '1px solid rgba(234, 179, 8, 0.3)' }}>
                 <span style={{ fontSize: '1.2rem' }}>📋</span>
@@ -308,8 +307,8 @@ export default function App() {
           </div>
         )}
 
-        {/* PÁGINAS MODULARES */}
-        {ecraAtual === 'novo_produto' && <NovoProduto setEcraAtual={setEcraAtual} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} />}
+        {/* PÁGINAS MODULARES - PASSAMOS OS ARTIGOS PARA O NOVO PRODUTO AQUI */}
+        {ecraAtual === 'novo_produto' && <NovoProduto artigos={artigos} setEcraAtual={setEcraAtual} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} />}
         {ecraAtual === 'catalogo' && <Catalogo artigos={artigos} carregarDados={carregarDados} pedirConfirmacaoApagar={pedirConfirmacaoApagar} />}
         {ecraAtual === 'nova_encomenda' && <NovaEncomenda artigos={artigos} setEcraAtual={setEcraAtual} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} />}
         {ecraAtual === 'encomendas_pendentes' && <EncomendasPendentes artigos={artigos} encomendas={encomendas} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} pedirConfirmacaoApagarEncomenda={pedirConfirmacaoApagarEncomenda} iniciarExpedicaoDePendente={iniciarExpedicaoDePendente} />}
