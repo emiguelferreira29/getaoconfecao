@@ -12,12 +12,22 @@ type Props = {
   iniciarExpedicaoDePendente: (op_numero: string) => void;
 };
 
+type EditItem = {
+  original_id?: number;
+  artigo_codigo: string;
+  artigo_nome: string;
+  quantidade: number;
+};
+
 export default function EncomendasPendentes({ 
   artigos, encomendas, carregarDados, mostrarAlerta, pedirConfirmacaoApagarEncomenda, iniciarExpedicaoDePendente 
 }: Props) {
+  
+  // ESTADOS DE EDIÇÃO DA OP
   const [editandoOpId, setEditandoOpId] = useState<string | null>(null);
   const [editOpData, setEditOpData] = useState<string>('');
-  const [editOpQuantidades, setEditOpQuantidades] = useState<Record<number, number>>({});
+  const [editItens, setEditItens] = useState<EditItem[]>([]);
+  const [itensRemovidos, setItensRemovidos] = useState<number[]>([]);
 
   // ESTADOS DO SUBCONTRATO
   const [subcontratandoOpId, setSubcontratandoOpId] = useState<string | null>(null);
@@ -48,25 +58,70 @@ export default function EncomendasPendentes({
     return { corBorda: '#22c55e', icone: '🟢', texto: `No prazo (${new Date(dataStr).toLocaleDateString('pt-PT')})` };
   };
 
+  // INICIA A EDIÇÃO COM OS ARTIGOS ATUAIS
   const iniciarEdicaoOp = (grupo: any) => {
-    setEditandoOpId(grupo.op_numero); setEditOpData(grupo.data_entrega || '');
+    setEditandoOpId(grupo.op_numero); 
+    setEditOpData(grupo.data_entrega || '');
     setSubcontratandoOpId(null);
-    const qtds: Record<number, number> = {};
-    grupo.itens.forEach((item: Encomenda) => { qtds[item.id] = item.quantidade_pedida; });
-    setEditOpQuantidades(qtds);
+    
+    const itensIniciais: EditItem[] = grupo.itens.map((item: Encomenda) => ({
+      original_id: item.id,
+      artigo_codigo: item.artigo_codigo,
+      artigo_nome: item.artigo_nome,
+      quantidade: item.quantidade_pedida
+    }));
+    
+    setEditItens(itensIniciais);
+    setItensRemovidos([]);
   };
 
-  const guardarEdicaoOp = async (op_numero: string) => {
+  // GUARDA TODAS AS ALTERAÇÕES (ALTERAÇÕES, NOVOS E APAGADOS)
+  const guardarEdicaoOp = async (grupo: any) => {
     try {
-      const itensParaAtualizar = Object.keys(editOpQuantidades);
-      for (const idStr of itensParaAtualizar) {
-        const id = parseInt(idStr); const qtd = editOpQuantidades[id];
-        const { error } = await supabase.from('encomendas').update({ quantidade_pedida: qtd, data_entrega: editOpData ? editOpData : null }).eq('id', id);
+      if (editItens.length === 0) {
+        return mostrarAlerta('Atenção', 'A OP precisa de ter pelo menos um artigo. Se deseja apagar a OP toda, use o ícone do lixo.', 'aviso');
+      }
+
+      if (editItens.some(i => !i.artigo_codigo || i.quantidade <= 0)) {
+        return mostrarAlerta('Atenção', 'Preencha corretamente os artigos e quantidades.', 'aviso');
+      }
+
+      // 1. Apagar os artigos que o utilizador removeu na edição
+      for (const id of itensRemovidos) {
+        const { error } = await supabase.from('encomendas').delete().eq('id', id);
         if (error) throw error;
       }
-      mostrarAlerta('Sucesso', `A ${op_numero} foi atualizada!`, 'sucesso'); 
-      setEditandoOpId(null); carregarDados();
-    } catch (err: any) { mostrarAlerta('Erro ao atualizar', err.message, 'erro'); }
+
+      // 2. Atualizar artigos existentes ou Inserir os novos
+      for (const item of editItens) {
+        if (item.original_id) {
+          const { error } = await supabase.from('encomendas').update({
+            artigo_codigo: item.artigo_codigo,
+            artigo_nome: item.artigo_nome,
+            quantidade_pedida: item.quantidade,
+            data_entrega: editOpData ? editOpData : null
+          }).eq('id', item.original_id);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase.from('encomendas').insert({
+            op_numero: grupo.op_numero,
+            cliente_final: grupo.cliente_final,
+            artigo_codigo: item.artigo_codigo,
+            artigo_nome: item.artigo_nome,
+            quantidade_pedida: item.quantidade,
+            data_entrega: editOpData ? editOpData : null,
+            estado: 'pendente'
+          });
+          if (error) throw error;
+        }
+      }
+      
+      mostrarAlerta('Sucesso', `A OP ${grupo.op_numero} foi atualizada!`, 'sucesso'); 
+      setEditandoOpId(null); 
+      carregarDados();
+    } catch (err: any) { 
+      mostrarAlerta('Erro ao atualizar', err.message, 'erro'); 
+    }
   };
 
   const handleMudarArtigoSubcontrato = (nomeArt: string) => {
@@ -90,7 +145,6 @@ export default function EncomendasPendentes({
   };
 
   const guardarSubcontrato = async (op_numero: string) => {
-    // AGORA EXIGE TAMBÉM A PESSOA
     if (!subArtigoNome || !subQtd || !subCusto || !subPessoa) {
       return mostrarAlerta('Atenção', 'Preencha o artigo, a quantidade, o custo e a quem vai subcontratar.', 'aviso');
     }
@@ -141,25 +195,80 @@ export default function EncomendasPendentes({
                 </div>
                 <div style={{ padding: '15px' }}>
                   
+                  {/* ZONA DE EDIÇÃO DA OP */}
                   {editandoOpId === grupo.op_numero ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', animation: 'fadeIn 0.2s' }}>
-                      <div><label style={{...labelStyle, fontSize: '0.85rem'}}>Nova Data de Entrega:</label><input type="date" value={editOpData} onChange={e => setEditOpData(e.target.value)} style={{...inputStyle, padding: '8px'}} /></div>
+                      
                       <div>
-                        <label style={{...labelStyle, fontSize: '0.85rem'}}>Ajustar Quantidades (Faltam entregar):</label>
-                        {grupo.itens.map(item => (
-                          <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px dashed rgba(255,255,255,0.05)' }}>
-                            <span style={{ fontSize: '0.95rem' }}>{item.artigo_nome}</span>
-                            <input type="number" min="1" value={editOpQuantidades[item.id] || ''} onChange={e => setEditOpQuantidades({...editOpQuantidades, [item.id]: parseInt(e.target.value) || 0})} style={{...inputStyle, width: '90px', padding: '6px', textAlign: 'center'}} />
+                        <label style={{...labelStyle, fontSize: '0.85rem'}}>Nova Data de Entrega:</label>
+                        <input type="date" value={editOpData} onChange={e => setEditOpData(e.target.value)} style={{...inputStyle, padding: '8px'}} />
+                      </div>
+                      
+                      <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px' }}>
+                        <label style={{...labelStyle, fontSize: '0.85rem'}}>Artigos da Encomenda:</label>
+                        
+                        {editItens.map((item, index) => (
+                          <div key={index} style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px' }}>
+                            <select 
+                              value={item.artigo_codigo} 
+                              onChange={e => {
+                                const art = artigos.find(a => a.codigo === e.target.value);
+                                if(art) {
+                                  const novosItens = [...editItens];
+                                  novosItens[index].artigo_codigo = art.codigo;
+                                  novosItens[index].artigo_nome = art.nome;
+                                  setEditItens(novosItens);
+                                }
+                              }}
+                              style={{...inputStyle, flex: 1, padding: '8px', fontSize: '0.9rem'}}
+                            >
+                              <option value="" disabled>Escolha o artigo...</option>
+                              {artigos.map(a => <option key={a.id} value={a.codigo}>{a.nome}</option>)}
+                            </select>
+                            
+                            <input 
+                              type="number" 
+                              min="1" 
+                              value={item.quantidade || ''} 
+                              onChange={e => {
+                                const novosItens = [...editItens];
+                                novosItens[index].quantidade = parseInt(e.target.value) || 0;
+                                setEditItens(novosItens);
+                              }} 
+                              style={{...inputStyle, width: '65px', padding: '8px', textAlign: 'center'}} 
+                            />
+                            
+                            <button 
+                              onClick={() => {
+                                if (item.original_id) setItensRemovidos([...itensRemovidos, item.original_id]);
+                                const novosItens = [...editItens];
+                                novosItens.splice(index, 1);
+                                setEditItens(novosItens);
+                              }}
+                              style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '1.3rem', cursor: 'pointer', padding: '0 5px' }}
+                              title="Remover artigo"
+                            >
+                              ✕
+                            </button>
                           </div>
                         ))}
+
+                        <button 
+                          onClick={() => setEditItens([...editItens, { artigo_codigo: '', artigo_nome: '', quantidade: 1 }])}
+                          style={{...btnSecondary, padding: '10px', fontSize: '0.85rem', width: '100%', marginTop: '5px', borderStyle: 'dashed', backgroundColor: 'transparent'}}
+                        >
+                          ➕ Adicionar Novo Artigo
+                        </button>
                       </div>
+
                       <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                         <button onClick={() => setEditandoOpId(null)} style={{...btnSecondary, padding: '10px', flex: 1}}>Cancelar</button>
-                        <button onClick={() => guardarEdicaoOp(grupo.op_numero)} style={{...btnPrimary, backgroundColor: '#22c55e', padding: '10px', flex: 1}}>Guardar</button>
+                        <button onClick={() => guardarEdicaoOp(grupo)} style={{...btnPrimary, backgroundColor: '#22c55e', padding: '10px', flex: 1}}>Guardar Alterações</button>
                       </div>
                     </div>
                   ) : (
                     <>
+                      {/* VISTA NORMAL */}
                       <h4 style={{ margin: '0 0 10px 0', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Falta produzir/entregar:</h4>
                       {grupo.itens.map(item => (
                         <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px dashed rgba(255,255,255,0.05)' }}>
@@ -190,10 +299,8 @@ export default function EncomendasPendentes({
                           
                           <div>
                             <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Subcontratado a (Obrigatório)</label>
-                            {/* AQUI FOI ALTERADO DE INPUT DE TEXTO LIVRE PARA UM SELECT */}
                             <select value={subPessoa} onChange={e => setSubPessoa(e.target.value)} style={inputStyle}>
                               <option value="" disabled>Escolha a quem vai subcontratar...</option>
-                              {/* Se no futuro tiver mais nomes, basta adicionar mais <option> aqui */}
                               <option value="Ana">Ana</option>
                             </select>
                           </div>
