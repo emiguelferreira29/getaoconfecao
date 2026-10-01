@@ -69,7 +69,6 @@ export default function EncomendasPendentes({
     } catch (err: any) { mostrarAlerta('Erro ao atualizar', err.message, 'erro'); }
   };
 
-  // CÁLCULO AUTOMÁTICO DO CUSTO QUANDO MUDA ARTIGO OU QUANTIDADE
   const handleMudarArtigoSubcontrato = (nomeArt: string) => {
     setSubArtigoNome(nomeArt);
     const art = artigos.find(a => a.nome === nomeArt);
@@ -91,7 +90,10 @@ export default function EncomendasPendentes({
   };
 
   const guardarSubcontrato = async (op_numero: string) => {
-    if (!subArtigoNome || !subQtd || !subCusto) return mostrarAlerta('Atenção', 'Preencha o artigo, quantidade e custo.', 'aviso');
+    // AGORA EXIGE TAMBÉM A PESSOA
+    if (!subArtigoNome || !subQtd || !subCusto || !subPessoa) {
+      return mostrarAlerta('Atenção', 'Preencha o artigo, a quantidade, o custo e a quem vai subcontratar.', 'aviso');
+    }
     
     const { error } = await supabase.from('subcontratos').insert({
       op_numero,
@@ -187,8 +189,13 @@ export default function EncomendasPendentes({
                           </div>
                           
                           <div>
-                            <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Subcontratado a (Opcional)</label>
-                            <input type="text" placeholder="Nome / Empresa" value={subPessoa} onChange={e => setSubPessoa(e.target.value)} style={inputStyle} />
+                            <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Subcontratado a (Obrigatório)</label>
+                            {/* AQUI FOI ALTERADO DE INPUT DE TEXTO LIVRE PARA UM SELECT */}
+                            <select value={subPessoa} onChange={e => setSubPessoa(e.target.value)} style={inputStyle}>
+                              <option value="" disabled>Escolha a quem vai subcontratar...</option>
+                              {/* Se no futuro tiver mais nomes, basta adicionar mais <option> aqui */}
+                              <option value="Ana">Ana</option>
+                            </select>
                           </div>
 
                           <div style={{ display: 'flex', gap: '10px', marginTop: '5px' }}>
