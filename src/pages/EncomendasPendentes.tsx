@@ -110,15 +110,10 @@ export default function EncomendasPendentes({
         }
       }
 
-      // NOVO: Apaga as subcontratações antigas da OP e avisa o utilizador
       const { data: subsApagados } = await supabase.from('subcontratos').delete().eq('op_numero', grupo.op_numero).select();
 
       if (subsApagados && subsApagados.length > 0) {
-         mostrarAlerta(
-           'OP Atualizada!', 
-           `Como alterou as peças/quantidades desta encomenda, as subcontratações antigas foram anuladas. Terá de as registar de novo!`, 
-           'aviso'
-         );
+         mostrarAlerta('OP Atualizada!', `Como alterou as peças/quantidades desta encomenda, as subcontratações antigas foram anuladas. Terá de as registar de novo!`, 'aviso');
       } else {
          mostrarAlerta('Sucesso', `A OP ${grupo.op_numero} foi atualizada!`, 'sucesso'); 
       }
@@ -145,8 +140,6 @@ export default function EncomendasPendentes({
     const qt = parseInt(qtdStr);
     if (art && !isNaN(qt)) {
       setSubCusto((qt * (art.custo_subcontratacao || 0)).toFixed(2));
-    } else {
-      setSubCusto('');
     }
   };
 
@@ -178,6 +171,12 @@ export default function EncomendasPendentes({
   return (
     <div style={{ animation: 'fadeIn 0.3s' }}>
       <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Encomendas por Entregar</h2>
+      
+      {/* DATALIST INVISÍVEL PARA AJUDAR NO PREENCHIMENTO DO SUBCONTRATO */}
+      <datalist id="catalogo-artigos">
+        {artigos.map(a => <option key={a.id} value={a.nome} />)}
+      </datalist>
+
       {gruposPendentes.length === 0 ? <p style={{ color: 'var(--text-secondary)', textAlign: 'center' }}>Não existem encomendas pendentes.</p> : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {gruposPendentes.map(grupo => {
@@ -232,9 +231,7 @@ export default function EncomendasPendentes({
                             </select>
                             
                             <input 
-                              type="number" 
-                              min="1" 
-                              value={item.quantidade || ''} 
+                              type="number" min="1" value={item.quantidade || ''} 
                               onChange={e => {
                                 const novosItens = [...editItens];
                                 novosItens[index].quantidade = parseInt(e.target.value) || 0;
@@ -251,10 +248,7 @@ export default function EncomendasPendentes({
                                 setEditItens(novosItens);
                               }}
                               style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '1.3rem', cursor: 'pointer', padding: '0 5px' }}
-                              title="Remover artigo"
-                            >
-                              ✕
-                            </button>
+                            >✕</button>
                           </div>
                         ))}
 
@@ -285,10 +279,18 @@ export default function EncomendasPendentes({
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', animation: 'fadeIn 0.2s', marginTop: '15px', backgroundColor: 'rgba(0,0,0,0.2)', padding: '15px', borderRadius: '8px', border: '1px dashed #eab308' }}>
                           <h4 style={{ margin: 0, color: '#eab308' }}>🤝 Registar Subcontratação</h4>
                           
-                          <select value={subArtigoNome} onChange={e => handleMudarArtigoSubcontrato(e.target.value)} style={inputStyle}>
-                            <option value="" disabled>Artigo a subcontratar...</option>
-                            {grupo.itens.map(item => <option key={item.id} value={item.artigo_nome}>{item.artigo_nome}</option>)}
-                          </select>
+                          <div>
+                            <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>O que vai subcontratar? (Escreva ou escolha da lista)</label>
+                            {/* AQUI ESTÁ A MÁGICA DA AUTONOMIA: Input livre associado ao datalist */}
+                            <input 
+                              type="text" 
+                              list="catalogo-artigos"
+                              value={subArtigoNome} 
+                              onChange={e => handleMudarArtigoSubcontrato(e.target.value)} 
+                              placeholder="Ex: Calções do equipamento"
+                              style={inputStyle} 
+                            />
+                          </div>
                           
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                             <div>
