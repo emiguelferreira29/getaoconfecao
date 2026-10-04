@@ -1,12 +1,28 @@
+import { supabase } from '../supabase';
 import type { Subcontrato } from '../App';
 
 type Props = {
   subcontratos: Subcontrato[];
+  carregarDados: () => void;
+  mostrarAlerta: (titulo: string, mensagem: string, tipo: 'sucesso'|'erro'|'aviso') => void;
 };
 
-export default function Subcontratos({ subcontratos }: Props) {
+export default function Subcontratos({ subcontratos, carregarDados, mostrarAlerta }: Props) {
   
-  // Agrupar os subcontratos pelo nome de quem está a fazer o trabalho
+  // Função para apagar subcontrato individual da lista
+  const apagarSubcontrato = async (id: number, artigo: string, op: string) => {
+    if (!window.confirm(`Tem a certeza que deseja anular a subcontratação de ${artigo} da OP ${op}?`)) return;
+    
+    const { error } = await supabase.from('subcontratos').delete().eq('id', id);
+    
+    if (error) {
+      mostrarAlerta('Erro', error.message, 'erro');
+    } else {
+      mostrarAlerta('Sucesso', 'Registo de subcontratação anulado.', 'sucesso');
+      carregarDados();
+    }
+  };
+
   const agruparPorSubcontratado = () => {
     const grupos: Record<string, { nome: string; itens: Subcontrato[]; totalPecas: number; totalCusto: number }> = {};
     
@@ -22,7 +38,6 @@ export default function Subcontratos({ subcontratos }: Props) {
       grupos[nome].totalCusto += Number(sub.custo_total);
     });
 
-    // Ordenar por ordem alfabética do nome do subcontratado
     return Object.values(grupos).sort((a, b) => a.nome.localeCompare(b.nome));
   };
 
@@ -39,7 +54,6 @@ export default function Subcontratos({ subcontratos }: Props) {
           {dados.map(grupo => (
             <div key={grupo.nome} style={{ backgroundColor: 'var(--surface-color)', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
               
-              {/* CABEÇALHO DO SUBCONTRATADO */}
               <div style={{ backgroundColor: 'rgba(234, 179, 8, 0.08)', padding: '15px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h3 style={{ margin: 0, color: '#eab308', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   🤝 {grupo.nome}
@@ -50,11 +64,10 @@ export default function Subcontratos({ subcontratos }: Props) {
                 </div>
               </div>
 
-              {/* LISTA DE OPs E ARTIGOS QUE ESTÃO LÁ */}
               <div style={{ padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {grupo.itens.map(item => (
-                  <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '8px 0', borderBottom: '1px dashed rgba(255,255,255,0.05)' }}>
-                    <div>
+                  <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px dashed rgba(255,255,255,0.05)' }}>
+                    <div style={{ flex: 1 }}>
                       <strong style={{ color: '#3b82f6', display: 'block', fontSize: '1.05rem', marginBottom: '4px' }}>
                         OP: {item.op_numero}
                       </strong>
@@ -63,7 +76,18 @@ export default function Subcontratos({ subcontratos }: Props) {
                         Data de envio: {new Date(item.data).toLocaleDateString('pt-PT')}
                       </small>
                     </div>
-                    <strong style={{ color: '#ef4444' }}>{Number(item.custo_total).toFixed(2)}€</strong>
+                    
+                    {/* ZONA DE CUSTO E APAGAR */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                      <strong style={{ color: '#ef4444' }}>{Number(item.custo_total).toFixed(2)}€</strong>
+                      <button 
+                        onClick={() => apagarSubcontrato(item.id, item.artigo_nome, item.op_numero)} 
+                        style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '1.2rem', cursor: 'pointer', padding: '5px' }}
+                        title="Anular Subcontratação"
+                      >
+                        🗑️
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

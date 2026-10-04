@@ -23,13 +23,11 @@ export default function EncomendasPendentes({
   artigos, encomendas, carregarDados, mostrarAlerta, pedirConfirmacaoApagarEncomenda, iniciarExpedicaoDePendente 
 }: Props) {
   
-  // ESTADOS DE EDIÇÃO DA OP
   const [editandoOpId, setEditandoOpId] = useState<string | null>(null);
   const [editOpData, setEditOpData] = useState<string>('');
   const [editItens, setEditItens] = useState<EditItem[]>([]);
   const [itensRemovidos, setItensRemovidos] = useState<number[]>([]);
 
-  // ESTADOS DO SUBCONTRATO
   const [subcontratandoOpId, setSubcontratandoOpId] = useState<string | null>(null);
   const [subArtigoNome, setSubArtigoNome] = useState('');
   const [subQtd, setSubQtd] = useState('');
@@ -58,7 +56,6 @@ export default function EncomendasPendentes({
     return { corBorda: '#22c55e', icone: '🟢', texto: `No prazo (${new Date(dataStr).toLocaleDateString('pt-PT')})` };
   };
 
-  // INICIA A EDIÇÃO COM OS ARTIGOS ATUAIS
   const iniciarEdicaoOp = (grupo: any) => {
     setEditandoOpId(grupo.op_numero); 
     setEditOpData(grupo.data_entrega || '');
@@ -75,24 +72,21 @@ export default function EncomendasPendentes({
     setItensRemovidos([]);
   };
 
-  // GUARDA TODAS AS ALTERAÇÕES (ALTERAÇÕES, NOVOS E APAGADOS)
   const guardarEdicaoOp = async (grupo: any) => {
     try {
       if (editItens.length === 0) {
-        return mostrarAlerta('Atenção', 'A OP precisa de ter pelo menos um artigo. Se deseja apagar a OP toda, use o ícone do lixo.', 'aviso');
+        return mostrarAlerta('Atenção', 'A OP precisa de ter pelo menos um artigo.', 'aviso');
       }
 
       if (editItens.some(i => !i.artigo_codigo || i.quantidade <= 0)) {
         return mostrarAlerta('Atenção', 'Preencha corretamente os artigos e quantidades.', 'aviso');
       }
 
-      // 1. Apagar os artigos que o utilizador removeu na edição
       for (const id of itensRemovidos) {
         const { error } = await supabase.from('encomendas').delete().eq('id', id);
         if (error) throw error;
       }
 
-      // 2. Atualizar artigos existentes ou Inserir os novos
       for (const item of editItens) {
         if (item.original_id) {
           const { error } = await supabase.from('encomendas').update({
@@ -115,8 +109,20 @@ export default function EncomendasPendentes({
           if (error) throw error;
         }
       }
+
+      // NOVO: Apaga as subcontratações antigas da OP e avisa o utilizador
+      const { data: subsApagados } = await supabase.from('subcontratos').delete().eq('op_numero', grupo.op_numero).select();
+
+      if (subsApagados && subsApagados.length > 0) {
+         mostrarAlerta(
+           'OP Atualizada!', 
+           `Como alterou as peças/quantidades desta encomenda, as subcontratações antigas foram anuladas. Terá de as registar de novo!`, 
+           'aviso'
+         );
+      } else {
+         mostrarAlerta('Sucesso', `A OP ${grupo.op_numero} foi atualizada!`, 'sucesso'); 
+      }
       
-      mostrarAlerta('Sucesso', `A OP ${grupo.op_numero} foi atualizada!`, 'sucesso'); 
       setEditandoOpId(null); 
       carregarDados();
     } catch (err: any) { 
@@ -160,7 +166,7 @@ export default function EncomendasPendentes({
     if (error) {
       mostrarAlerta('Erro', error.message, 'erro');
     } else {
-      mostrarAlerta('Sucesso', 'O Custo do subcontrato foi registado e associado a esta OP!', 'sucesso');
+      mostrarAlerta('Sucesso', 'O Custo do subcontrato foi registado!', 'sucesso');
       setSubcontratandoOpId(null);
       setSubArtigoNome(''); setSubQtd(''); setSubCusto(''); setSubPessoa('');
       carregarDados();
@@ -195,7 +201,6 @@ export default function EncomendasPendentes({
                 </div>
                 <div style={{ padding: '15px' }}>
                   
-                  {/* ZONA DE EDIÇÃO DA OP */}
                   {editandoOpId === grupo.op_numero ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', animation: 'fadeIn 0.2s' }}>
                       
@@ -268,7 +273,6 @@ export default function EncomendasPendentes({
                     </div>
                   ) : (
                     <>
-                      {/* VISTA NORMAL */}
                       <h4 style={{ margin: '0 0 10px 0', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Falta produzir/entregar:</h4>
                       {grupo.itens.map(item => (
                         <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px dashed rgba(255,255,255,0.05)' }}>

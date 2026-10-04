@@ -307,14 +307,16 @@ export default function App() {
           </div>
         )}
 
-        {/* PÁGINAS MODULARES - PASSAMOS OS ARTIGOS PARA O NOVO PRODUTO AQUI */}
+        {/* PÁGINAS MODULARES */}
         {ecraAtual === 'novo_produto' && <NovoProduto artigos={artigos} setEcraAtual={setEcraAtual} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} />}
         {ecraAtual === 'catalogo' && <Catalogo artigos={artigos} carregarDados={carregarDados} pedirConfirmacaoApagar={pedirConfirmacaoApagar} />}
         {ecraAtual === 'nova_encomenda' && <NovaEncomenda artigos={artigos} setEcraAtual={setEcraAtual} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} />}
         {ecraAtual === 'encomendas_pendentes' && <EncomendasPendentes artigos={artigos} encomendas={encomendas} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} pedirConfirmacaoApagarEncomenda={pedirConfirmacaoApagarEncomenda} iniciarExpedicaoDePendente={iniciarExpedicaoDePendente} />}
         {ecraAtual === 'encomendas_concluidas' && <EncomendasConcluidas encomendas={encomendas} saidas={saidas} agruparSaidas={agruparSaidas} gerarPDF={gerarPDF} pedirConfirmacaoApagarEncomenda={pedirConfirmacaoApagarEncomenda} />}
         {ecraAtual === 'relatorio' && <Relatorio saidas={saidas} subcontratos={subcontratos} encomendas={encomendas} anularOP={anularOP} />}
-        {ecraAtual === 'subcontratos' && <Subcontratos subcontratos={subcontratos} />}
+        
+        {/* Passamos as novas props (carregarDados e mostrarAlerta) para os Subcontratos */}
+        {ecraAtual === 'subcontratos' && <Subcontratos subcontratos={subcontratos} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} />}
         
         {['escolher_expedicao', 'resumo_expedicao', 'scanner', 'formulario_saida'].includes(ecraAtual) && (
           <Expedicao ecraAtual={ecraAtual} setEcraAtual={setEcraAtual} artigos={artigos} saidas={saidas} encomendas={encomendas} carregarDados={carregarDados} mostrarAlerta={mostrarAlerta} listaExpedicao={listaExpedicao} setListaExpedicao={setListaExpedicao} modoExpedicao={modoExpedicao} setModoExpedicao={setModoExpedicao} opSelecionada={opSelecionada} setOpSelecionada={setOpSelecionada} />
