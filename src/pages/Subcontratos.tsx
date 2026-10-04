@@ -17,11 +17,24 @@ export default function Subcontratos({ subcontratos, carregarDados, mostrarAlert
   const [editCusto, setEditCusto] = useState('');
   const [editSubcontratado, setEditSubcontratado] = useState('');
 
-  const apagarSubcontrato = async (id: number, artigo: string, op: string) => {
-    if (!window.confirm(`Tem a certeza que deseja anular a subcontratação de ${artigo} da OP ${op}?`)) return;
-    const { error } = await supabase.from('subcontratos').delete().eq('id', id);
-    if (error) mostrarAlerta('Erro', error.message, 'erro');
-    else { mostrarAlerta('Sucesso', 'Registo de subcontratação anulado.', 'sucesso'); carregarDados(); }
+  // NOVO: Estado para o Modal de Confirmação (serve para Editar e para Apagar)
+  const [modalConfirmacao, setModalConfirmacao] = useState<{
+    aberto: boolean;
+    id: number | null;
+    tipo: 'editar' | 'apagar' | null;
+    titulo: string;
+    mensagem: string;
+  }>({ aberto: false, id: null, tipo: null, titulo: '', mensagem: '' });
+
+  // 1. Prepara a anulação e abre o modal
+  const pedirConfirmacaoApagar = (id: number, artigo: string, op: string) => {
+    setModalConfirmacao({
+      aberto: true,
+      id,
+      tipo: 'apagar',
+      titulo: 'Anular Subcontratação',
+      mensagem: `Tem a certeza que deseja anular a subcontratação de ${artigo} da OP ${op}?`
+    });
   };
 
   const iniciarEdicao = (item: Subcontrato) => {
@@ -32,7 +45,8 @@ export default function Subcontratos({ subcontratos, carregarDados, mostrarAlert
     setEditSubcontratado(item.subcontratado_a || 'Ana');
   };
 
-  const guardarEdicao = async (id: number) => {
+  // 2. Valida os campos da edição e abre o modal
+  const pedirConfirmacaoEdicao = (id: number) => {
     const qtdNum = parseInt(editQuantidade);
     const custoNum = parseFloat(editCusto.replace(',', '.'));
     
@@ -40,21 +54,53 @@ export default function Subcontratos({ subcontratos, carregarDados, mostrarAlert
       return mostrarAlerta('Atenção', 'Preencha todos os campos corretamente.', 'aviso');
     }
 
-    const { error } = await supabase.from('subcontratos').update({
-      artigo_nome: editArtigoNome,
-      quantidade: qtdNum,
-      custo_total: custoNum,
-      subcontratado_a: editSubcontratado
-    }).eq('id', id);
-
-    if (error) {
-      mostrarAlerta('Erro', error.message, 'erro');
-    } else {
-      mostrarAlerta('Sucesso', 'Subcontrato atualizado!', 'sucesso');
-      setEditandoId(null);
-      carregarDados();
-    }
+    setModalConfirmacao({
+      aberto: true,
+      id,
+      tipo: 'editar',
+      titulo: 'Confirmar Alteração',
+      mensagem: 'Pretende guardar as novas alterações feitas a este subcontrato?'
+    });
   };
+
+  // 3. Executa a ação final (Apagar ou Editar) depois do utilizador dizer "Sim"
+  const confirmarAcaoModal = async () => {
+    const { id, tipo } = modalConfirmacao;
+    if (!id || !tipo) return;
+
+    if (tipo === 'apagar') {
+      const { error } = await supabase.from('subcontratos').delete().eq('id', id);
+      if (error) mostrarAlerta('Erro', error.message, 'erro');
+      else { 
+        mostrarAlerta('Sucesso', 'Registo de subcontratação anulado.', 'sucesso'); 
+        carregarDados(); 
+      }
+    } 
+    else if (tipo === 'editar') {
+      const qtdNum = parseInt(editQuantidade);
+      const custoNum = parseFloat(editCusto.replace(',', '.'));
+      
+      const { error } = await supabase.from('subcontratos').update({
+        artigo_nome: editArtigoNome,
+        quantidade: qtdNum,
+        custo_total: custoNum,
+        subcontratado_a: editSubcontratado
+      }).eq('id', id);
+
+      if (error) {
+        mostrarAlerta('Erro', error.message, 'erro');
+      } else {
+        mostrarAlerta('Sucesso', 'Subcontrato atualizado com sucesso!', 'sucesso');
+        setEditandoId(null);
+        carregarDados();
+      }
+    }
+
+    // Fecha o modal no fim
+    setModalConfirmacao({ aberto: false, id: null, tipo: null, titulo: '', mensagem: '' });
+  };
+
+  const fecharModal = () => setModalConfirmacao({ aberto: false, id: null, tipo: null, titulo: '', mensagem: '' });
 
   const agruparPorSubcontratado = () => {
     const grupos: Record<string, { nome: string; itens: Subcontrato[]; totalPecas: number; totalCusto: number }> = {};
@@ -108,7 +154,8 @@ export default function Subcontratos({ subcontratos, carregarDados, mostrarAlert
                         </select>
                         <div style={{ display: 'flex', gap: '10px' }}>
                            <button onClick={() => setEditandoId(null)} style={{...btnSecondary, padding: '10px', flex: 1}}>Cancelar</button>
-                           <button onClick={() => guardarEdicao(item.id)} style={{...btnPrimary, backgroundColor: '#22c55e', padding: '10px', flex: 1}}>Guardar</button>
+                           {/* AQUI CHAMA A CONFIRMAÇÃO */}
+                           <button onClick={() => pedirConfirmacaoEdicao(item.id)} style={{...btnPrimary, backgroundColor: '#22c55e', padding: '10px', flex: 1}}>Guardar</button>
                         </div>
                       </div>
                     ) : (
@@ -122,7 +169,8 @@ export default function Subcontratos({ subcontratos, carregarDados, mostrarAlert
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                           <strong style={{ color: '#ef4444' }}>{Number(item.custo_total).toFixed(2)}€</strong>
                           <button onClick={() => iniciarEdicao(item)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '5px' }} title="Editar Subcontrato">✏️</button>
-                          <button onClick={() => apagarSubcontrato(item.id, item.artigo_nome, item.op_numero)} style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '1.2rem', cursor: 'pointer', padding: '5px' }} title="Anular Subcontratação">🗑️</button>
+                          {/* AQUI CHAMA A CONFIRMAÇÃO DO APAGAR */}
+                          <button onClick={() => pedirConfirmacaoApagar(item.id, item.artigo_nome, item.op_numero)} style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '1.2rem', cursor: 'pointer', padding: '5px' }} title="Anular Subcontratação">🗑️</button>
                         </div>
                       </div>
                     )}
@@ -134,6 +182,35 @@ export default function Subcontratos({ subcontratos, carregarDados, mostrarAlert
           ))}
         </div>
       )}
+
+      {/* --- O NOVO MODAL DE CONFIRMAÇÃO BONITO --- */}
+      {modalConfirmacao.aberto && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', animation: 'fadeIn 0.2s' }}>
+          <div style={{ backgroundColor: 'var(--surface-color)', borderRadius: '16px', padding: '25px', width: '100%', maxWidth: '400px', border: '1px solid var(--border-color)', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
+            
+            <h3 style={{ margin: '0 0 15px 0', color: modalConfirmacao.tipo === 'apagar' ? '#ef4444' : '#3b82f6', fontSize: '1.4rem' }}>
+              {modalConfirmacao.titulo}
+            </h3>
+            
+            <p style={{ color: 'var(--text-secondary)', marginBottom: '25px', fontSize: '1rem', lineHeight: '1.5' }}>
+              {modalConfirmacao.mensagem}
+            </p>
+            
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={fecharModal} style={{ ...btnSecondary, flex: 1, padding: '12px' }}>
+                Cancelar
+              </button>
+              <button 
+                onClick={confirmarAcaoModal} 
+                style={{ ...btnPrimary, flex: 1, padding: '12px', backgroundColor: modalConfirmacao.tipo === 'apagar' ? '#ef4444' : '#22c55e' }}
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
