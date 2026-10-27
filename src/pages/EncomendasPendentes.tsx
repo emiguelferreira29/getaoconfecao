@@ -140,6 +140,8 @@ export default function EncomendasPendentes({
     const qt = parseInt(qtdStr);
     if (art && !isNaN(qt)) {
       setSubCusto((qt * (art.custo_subcontratacao || 0)).toFixed(2));
+    } else {
+      setSubCusto('');
     }
   };
 
@@ -172,7 +174,6 @@ export default function EncomendasPendentes({
     <div style={{ animation: 'fadeIn 0.3s' }}>
       <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>Encomendas por Entregar</h2>
       
-      {/* DATALIST INVISÍVEL PARA AJUDAR NO PREENCHIMENTO DO SUBCONTRATO */}
       <datalist id="catalogo-artigos">
         {artigos.map(a => <option key={a.id} value={a.nome} />)}
       </datalist>
@@ -183,13 +184,22 @@ export default function EncomendasPendentes({
             const status = calcularStatusData(grupo.data_entrega);
             return (
               <div key={grupo.op_numero} style={{ backgroundColor: 'var(--surface-color)', border: `2px solid ${status.corBorda}`, borderRadius: '12px', overflow: 'hidden' }}>
+                
                 <div style={{ padding: '15px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.02)' }}>
-                  <div>
-                    <strong style={{ fontSize: '1.2rem', display: 'block' }}>{grupo.op_numero}</strong>
+                  
+                  {/* ALTERAÇÃO AQUI: flex: 1, minWidth: 0 e wordBreak para moldar o texto */}
+                  <div style={{ flex: 1, minWidth: 0, paddingRight: '15px' }}>
+                    <strong style={{ fontSize: '1.2rem', display: 'block', wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+                      {grupo.op_numero}
+                    </strong>
                     {grupo.cliente_final && <small style={{ color: 'var(--text-secondary)' }}>👤 {grupo.cliente_final}</small>}
                   </div>
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  
+                  {/* flexShrink: 0 garante que os botões não são esmagados pelo texto */}
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexShrink: 0 }}>
+                    <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', display: 'none' }}>{/* Esconde texto em mobile se necessário, ou deixa estar. Vamos manter o ícone e texto mas flexivel */}</div>
                     <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{status.icone} {status.texto}</div>
+                    
                     {editandoOpId !== grupo.op_numero && (
                       <>
                         <button onClick={() => iniciarEdicaoOp(grupo)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '0 5px' }} title="Editar OP">✏️</button>
@@ -198,6 +208,7 @@ export default function EncomendasPendentes({
                     )}
                   </div>
                 </div>
+
                 <div style={{ padding: '15px' }}>
                   
                   {editandoOpId === grupo.op_numero ? (
@@ -281,7 +292,6 @@ export default function EncomendasPendentes({
                           
                           <div>
                             <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>O que vai subcontratar? (Escreva ou escolha da lista)</label>
-                            {/* AQUI ESTÁ A MÁGICA DA AUTONOMIA: Input livre associado ao datalist */}
                             <input 
                               type="text" 
                               list="catalogo-artigos"
