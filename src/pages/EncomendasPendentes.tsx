@@ -24,6 +24,7 @@ export default function EncomendasPendentes({
 }: Props) {
   
   const [editandoOpId, setEditandoOpId] = useState<string | null>(null);
+  const [editOpNumero, setEditOpNumero] = useState<string>(''); // <-- NOVO ESTADO PARA O NÚMERO DA OP
   const [editOpData, setEditOpData] = useState<string>('');
   const [editItens, setEditItens] = useState<EditItem[]>([]);
   const [itensRemovidos, setItensRemovidos] = useState<number[]>([]);
@@ -58,6 +59,7 @@ export default function EncomendasPendentes({
 
   const iniciarEdicaoOp = (grupo: any) => {
     setEditandoOpId(grupo.op_numero); 
+    setEditOpNumero(grupo.op_numero); // <-- INICIALIZAMOS COM O NÚMERO ATUAL
     setEditOpData(grupo.data_entrega || '');
     setSubcontratandoOpId(null);
     
@@ -82,6 +84,14 @@ export default function EncomendasPendentes({
         return mostrarAlerta('Atenção', 'Preencha corretamente os artigos e quantidades.', 'aviso');
       }
 
+      // NOVO: Garantir que temos um número de OP (se apagar tudo, mantém o original)
+      const opFinal = editOpNumero.trim() || grupo.op_numero;
+
+      // Se o número da OP mudou, vamos atualizar também a tabela das saídas (faturação) para não perder o histórico
+      if (opFinal !== grupo.op_numero) {
+        await supabase.from('saidas').update({ op_numero: opFinal }).eq('op_numero', grupo.op_numero);
+      }
+
       for (const id of itensRemovidos) {
         const { error } = await supabase.from('encomendas').delete().eq('id', id);
         if (error) throw error;
@@ -90,6 +100,7 @@ export default function EncomendasPendentes({
       for (const item of editItens) {
         if (item.original_id) {
           const { error } = await supabase.from('encomendas').update({
+            op_numero: opFinal, // <-- ATUALIZA O NÚMERO
             artigo_codigo: item.artigo_codigo,
             artigo_nome: item.artigo_nome,
             quantidade_pedida: item.quantidade,
@@ -98,7 +109,7 @@ export default function EncomendasPendentes({
           if (error) throw error;
         } else {
           const { error } = await supabase.from('encomendas').insert({
-            op_numero: grupo.op_numero,
+            op_numero: opFinal, // <-- INSERE COM O NÚMERO NOVO
             cliente_final: grupo.cliente_final,
             artigo_codigo: item.artigo_codigo,
             artigo_nome: item.artigo_nome,
@@ -113,9 +124,9 @@ export default function EncomendasPendentes({
       const { data: subsApagados } = await supabase.from('subcontratos').delete().eq('op_numero', grupo.op_numero).select();
 
       if (subsApagados && subsApagados.length > 0) {
-         mostrarAlerta('OP Atualizada!', `Como alterou as peças/quantidades desta encomenda, as subcontratações antigas foram anuladas. Terá de as registar de novo!`, 'aviso');
+         mostrarAlerta('OP Atualizada!', `Como alterou os dados desta encomenda, as subcontratações antigas foram anuladas. Terá de as registar de novo!`, 'aviso');
       } else {
-         mostrarAlerta('Sucesso', `A OP ${grupo.op_numero} foi atualizada!`, 'sucesso'); 
+         mostrarAlerta('Sucesso', `A OP ${opFinal} foi atualizada!`, 'sucesso'); 
       }
       
       setEditandoOpId(null); 
@@ -187,7 +198,6 @@ export default function EncomendasPendentes({
                 
                 <div style={{ padding: '15px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.02)' }}>
                   
-                  {/* ALTERAÇÃO AQUI: flex: 1, minWidth: 0 e wordBreak para moldar o texto */}
                   <div style={{ flex: 1, minWidth: 0, paddingRight: '15px' }}>
                     <strong style={{ fontSize: '1.2rem', display: 'block', wordBreak: 'break-word', overflowWrap: 'break-word' }}>
                       {grupo.op_numero}
@@ -195,9 +205,7 @@ export default function EncomendasPendentes({
                     {grupo.cliente_final && <small style={{ color: 'var(--text-secondary)' }}>👤 {grupo.cliente_final}</small>}
                   </div>
                   
-                  {/* flexShrink: 0 garante que os botões não são esmagados pelo texto */}
                   <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexShrink: 0 }}>
-                    <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', display: 'none' }}>{/* Esconde texto em mobile se necessário, ou deixa estar. Vamos manter o ícone e texto mas flexivel */}</div>
                     <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{status.icone} {status.texto}</div>
                     
                     {editandoOpId !== grupo.op_numero && (
@@ -214,9 +222,16 @@ export default function EncomendasPendentes({
                   {editandoOpId === grupo.op_numero ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', animation: 'fadeIn 0.2s' }}>
                       
-                      <div>
-                        <label style={{...labelStyle, fontSize: '0.85rem'}}>Nova Data de Entrega:</label>
-                        <input type="date" value={editOpData} onChange={e => setEditOpData(e.target.value)} style={{...inputStyle, padding: '8px'}} />
+                      {/* NOVAS CAIXAS: OP e DATA LADO A LADO */}
+                      <div style={{ display: 'flex', gap: '15px' }}>
+                        <div style={{ flex: 1 }}>
+                          <label style={{...labelStyle, fontSize: '0.85rem'}}>N.º da OP:</label>
+                          <input type="text" value={editOpNumero} onChange={e => setEditOpNumero(e.target.value)} style={{...inputStyle, padding: '8px'}} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <label style={{...labelStyle, fontSize: '0.85rem'}}>Nova Data de Entrega:</label>
+                          <input type="date" value={editOpData} onChange={e => setEditOpData(e.target.value)} style={{...inputStyle, padding: '8px'}} />
+                        </div>
                       </div>
                       
                       <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px' }}>
